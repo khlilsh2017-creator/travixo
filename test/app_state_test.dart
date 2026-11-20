@@ -4,6 +4,8 @@ import 'package:travel_in_app/data/models.dart';
 import 'package:travel_in_app/state/app_state.dart';
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
   test('cancelBooking refunds wallet only once', () async {
     SharedPreferences.setMockInitialValues({});
     final prefs = await SharedPreferences.getInstance();
