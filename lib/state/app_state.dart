@@ -205,8 +205,9 @@ class AppState extends ChangeNotifier {
     bookings.insert(0, b);
     prefs.setString('bookings', jsonEncode(bookings.map((e) => e.toJson()).toList()));
     notifications.insert(0, '✅ $title (${b.id})');
+    prefs.setStringList('notifications', notifications);
     notifyListeners();
-    return true;
+    return b;
   }
 
   void cancelBooking(String id) {
