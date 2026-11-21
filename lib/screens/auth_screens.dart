@@ -3,6 +3,7 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../data/models.dart';
+import '../supabase.dart';
 import '../theme/app_theme.dart';
 import 'main_shell.dart';
 import 'developer_dashboard.dart';
@@ -312,7 +313,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
       ]);
 }
 
-/// ===== دخول المطور (آمن — OTP تجريبي ثابت) =====
+/// ===== دخول المطور عبر Supabase Auth =====
 class DeveloperLoginScreen extends StatefulWidget {
   const DeveloperLoginScreen({super.key});
   @override
@@ -322,24 +323,84 @@ class DeveloperLoginScreen extends StatefulWidget {
 class _DeveloperLoginScreenState extends State<DeveloperLoginScreen> {
   final _user = TextEditingController();
   final _pass = TextEditingController();
-  final _twoFa = TextEditingController();
-  int _step = 0;
+  bool _loading = false;
 
-  void _next() {
+  Future<void> _login() async {
     final l = context.l;
-    // في الإنتاج: تحقق حقيقي من Backend + 2FA
-    if (_step == 0) {
-      if (_user.text.trim().isEmpty || _pass.text.trim().isEmpty) return;
-      setState(() => _step = 1);
+    final email = _user.text.trim();
+    final password = _pass.text.trim();
+    if (!email.contains('@') || password.length < 6) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(l.t('errEmail'))));
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      final res = await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+      final authUser = res.user;
+      if (authUser == null) throw Exception('Auth failed');
+
+      // التحقق من صلاحية المطور في جدول users أو userMetadata
+      String firstName = authUser.userMetadata?['first_name']?.toString() ?? 'Admin';
+      String secondName = authUser.userMetadata?['second_name']?.toString() ?? '';
+      String role = authUser.userMetadata?['role']?.toString() ?? 'developer';
+
+      try {
+        final row = await supabase
+            .from('users')
+            .select()
+            .eq('email', email)
+            .maybeSingle();
+        if (row != null) {
+          firstName = row['first_name']?.toString() ?? firstName;
+          secondName = row['second_name']?.toString() ?? secondName;
+          role = row['role']?.toString() ?? role;
+        }
+      } catch (_) {}
+
+      if (role != 'developer' && role != 'super_admin') {
+        await supabase.auth.signOut();
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(l.isArabic
+                ? 'هذا الحساب لا يملك صلاحية المطور'
+                : 'This account does not have developer access'),
+          ),
+        );
+        return;
+      }
+
+      if (!mounted) return;
+      context.read<AppState>().login(AppUser(
+            id: authUser.id,
+            firstName: firstName,
+            secondName: secondName,
+            age: 25,
+            email: authUser.email,
+            role: 'developer',
+            demo: false,
+          ));
+
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const DeveloperDashboard()),
+        (r) => false,
+      );
+    } catch (e) {
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('${l.t('twoFa')}: 0000 (Demo)')));
-    } else {
-      if (_twoFa.text.trim() != '0000') return;
-      Navigator.of(context).pushReplacement(MaterialPageRoute(
-          builder: (_) => ProfileSetupScreen(
-                isDeveloper: true,
-                email: _user.text.trim(),
-              )));
+        SnackBar(
+          content: Text(l.isArabic
+              ? 'فشل تسجيل الدخول: تأكد من البريد وكلمة المرور'
+              : 'Login failed: $e'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _loading = false);
     }
   }
 
@@ -347,7 +408,6 @@ class _DeveloperLoginScreenState extends State<DeveloperLoginScreen> {
   void dispose() {
     _user.dispose();
     _pass.dispose();
-    _twoFa.dispose();
     super.dispose();
   }
 
@@ -371,37 +431,33 @@ class _DeveloperLoginScreenState extends State<DeveloperLoginScreen> {
               textAlign: TextAlign.center,
               style: TextStyle(color: Theme.of(context).hintColor, fontSize: 13)),
           const SizedBox(height: 28),
-          if (_step == 0) ...[
-            TextField(
-              controller: _user,
-              decoration: InputDecoration(
-                  labelText: l.t('email'),
-                  prefixIcon: const Icon(Icons.admin_panel_settings_outlined)),
-            ),
-            const SizedBox(height: 16),
-            TextField(
-              controller: _pass,
-              obscureText: true,
-              decoration: InputDecoration(
-                  labelText: l.t('password'),
-                  prefixIcon: const Icon(Icons.lock)),
-            ),
-          ] else ...[
-            TextField(
-              controller: _twoFa,
-              keyboardType: TextInputType.number,
-              textAlign: TextAlign.center,
-              style: const TextStyle(fontSize: 24, letterSpacing: 10),
-              decoration: InputDecoration(
-                  labelText: l.t('twoFa'),
-                  prefixIcon: const Icon(Icons.security)),
-            ),
-          ],
+          TextField(
+            controller: _user,
+            keyboardType: TextInputType.emailAddress,
+            decoration: InputDecoration(
+                labelText: l.t('email'),
+                prefixIcon: const Icon(Icons.admin_panel_settings_outlined)),
+          ),
+          const SizedBox(height: 16),
+          TextField(
+            controller: _pass,
+            obscureText: true,
+            decoration: InputDecoration(
+                labelText: l.t('password'),
+                prefixIcon: const Icon(Icons.lock)),
+          ),
           const SizedBox(height: 24),
           ElevatedButton(
-              style: ElevatedButton.styleFrom(backgroundColor: TIColors.gold),
-              onPressed: _next,
-              child: Text(_step == 0 ? l.t('login') : l.t('verify'))),
+            style: ElevatedButton.styleFrom(backgroundColor: TIColors.gold),
+            onPressed: _loading ? null : _login,
+            child: _loading
+                ? const SizedBox(
+                    height: 20,
+                    width: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                : Text(l.t('login')),
+          ),
         ],
       ),
     );

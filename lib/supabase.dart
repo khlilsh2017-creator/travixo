@@ -2,12 +2,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 const String _supabaseUrl = String.fromEnvironment(
   'SUPABASE_URL',
-  defaultValue: 'https://vtuuogjfmpknlnryxdvp.supabase.co',
+  defaultValue: 'https://jopcqznfcuznbfdxtngs.supabase.co',
 );
 
 const String _supabaseAnonKey = String.fromEnvironment(
   'SUPABASE_ANON_KEY',
-  defaultValue: 'sb_publishable_7EBiA6_yp_EWE92jV2HuvA_FFPozsDO',
+  defaultValue: 'sb_publishable_eUFGNSjBnWhehX-AZoqGWQ_PNbbsQDf',
 );
 
 Future<void> initSupabase() async {
