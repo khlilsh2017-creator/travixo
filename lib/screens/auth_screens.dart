@@ -143,7 +143,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   final _email = TextEditingController();
   final _emailOtp = TextEditingController();
   final bool _otpSent = false;
-  bool _emailMode = false;
+  bool _emailMode = true;
   bool _emailOtpSent = false;
   bool _busy = false;
 
@@ -235,7 +235,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(l.isArabic
-              ? 'أدخل رمز التحقق المكون من 6 أرقام'
+              ? 'أدخل رمز التحقق الذي وصلك على البريد'
               : 'Enter the 6-digit verification code'),
         ),
       );
@@ -385,11 +385,11 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
                   controller: _emailOtp,
                   keyboardType: TextInputType.number,
                   textAlign: TextAlign.center,
-                  maxLength: 6,
+                  maxLength: 8,
                   style: const TextStyle(
-                      fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 8),
+                      fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 5),
                   decoration: InputDecoration(
-                    labelText: l.isArabic ? 'رمز التحقق (6 أرقام)' : '6-Digit Code',
+                    labelText: l.isArabic ? 'رمز التحقق (OTP)' : 'OTP Code',
                     prefixIcon: const Icon(Icons.verified_user_outlined),
                     counterText: '',
                   ),

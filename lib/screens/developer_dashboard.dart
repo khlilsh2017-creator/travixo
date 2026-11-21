@@ -30,6 +30,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _bookings = [];
   List<Map<String, dynamic>> _users = [];
+  Map<String, Map<String, dynamic>> _paymentsByBooking = {};
 
   @override
   void initState() {
@@ -57,6 +58,16 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
           .from('support_tickets')
           .select()
           .order('created_at', ascending: false);
+      final Map<String, Map<String, dynamic>> payMap = {};
+      try {
+        final payRes = await supabase.from('payments').select();
+        for (final row in List<Map<String, dynamic>>.from(payRes)) {
+          final bid = row['booking_id']?.toString();
+          if (bid != null && bid.isNotEmpty) {
+            payMap[bid] = row;
+          }
+        }
+      } catch (_) {}
 
       final bookingsList = List<Map<String, dynamic>>.from(bookingsRes);
       final ticketsList = List<Map<String, dynamic>>.from(ticketsRes);
@@ -68,6 +79,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
       if (!mounted) return;
       setState(() {
         _users = List<Map<String, dynamic>>.from(usersRes);
+        _paymentsByBooking = payMap;
         _usersCount = _users.length;
         _bookings = bookingsList;
         _bookingsCount = bookingsList.length;
@@ -107,73 +119,527 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     );
   }
 
+  String _serviceLabel(String? code, bool ar) {
+    switch (code) {
+      case 'hotel':
+        return ar ? 'فندق / إقامة' : 'Hotel';
+      case 'rentCar':
+        return ar ? 'تأجير سيارة' : 'Car Rental';
+      case 'localRide':
+        return ar ? 'سيارة مع سائق' : 'Ride with Driver';
+      case 'tour':
+        return ar ? 'رحلة سياحية' : 'Tour';
+      case 'package':
+        return ar ? 'باقة سفر' : 'Package';
+      case 'airport':
+        return ar ? 'توصيل مطار' : 'Airport Transfer';
+      default:
+        return code ?? (ar ? 'خدمة' : 'Service');
+    }
+  }
+
+  String _paymentLabel(String? method, bool ar) {
+    switch (method) {
+      case 'wallet':
+        return ar ? 'المحفظة الإلكترونية' : 'App Wallet';
+      case 'kuraimi':
+        return ar ? 'بنك الكريمي (حوالة)' : 'Kuraimi Bank';
+      case 'digitalWallet':
+        return ar ? 'محفظة رقمية (جوالي/فلوسك)' : 'Digital Wallet';
+      case 'cash':
+        return ar ? 'الدفع نقداً عند الاستلام' : 'Cash';
+      default:
+        return method ?? (ar ? 'غير محدد' : 'N/A');
+    }
+  }
+
+  String _statusLabel(String? st, bool ar) {
+    switch (st) {
+      case 'confirmed':
+        return ar ? 'مؤكد' : 'Confirmed';
+      case 'completed':
+        return ar ? 'مكتمل' : 'Completed';
+      case 'cancelled':
+        return ar ? 'ملغي' : 'Cancelled';
+      default:
+        return st ?? (ar ? 'قيد المراجعة' : 'Pending');
+    }
+  }
+
+  Color _statusColor(String? st) {
+    switch (st) {
+      case 'confirmed':
+        return TIColors.success;
+      case 'completed':
+        return TIColors.cardRent;
+      case 'cancelled':
+        return TIColors.danger;
+      default:
+        return TIColors.warning;
+    }
+  }
+
+  Map<String, dynamic>? _findUserForBooking(Map<String, dynamic> b) {
+    final uid = b['user_id']?.toString();
+    if (uid == null || uid.isEmpty) return null;
+    for (final u in _users) {
+      if (u['user_id']?.toString() == uid) return u;
+    }
+    return null;
+  }
+
+  Future<void> _updateBookingStatus(
+      Map<String, dynamic> b, String newStatus, bool ar) async {
+    await supabase
+        .from('bookings')
+        .update({'status': newStatus})
+        .eq('booking_id', b['booking_id']);
+    final targetUid = b['user_id'] is int
+        ? b['user_id'] as int
+        : int.tryParse(b['user_id']?.toString() ?? '');
+    final statusTitle = switch (newStatus) {
+      'confirmed' => ar ? 'تم تأكيد حجزك ✅' : 'Booking Confirmed',
+      'completed' => ar ? 'تم إكمال حجزك 🎉' : 'Booking Completed',
+      'cancelled' => ar ? 'تم إلغاء حجزك ❌' : 'Booking Cancelled',
+      _ => ar ? 'تحديث حالة الحجز' : 'Booking Updated',
+    };
+    await AppState.instance?.sendNotification(
+      userId: targetUid,
+      targetRole: 'customer',
+      title: statusTitle,
+      body: '${b['title'] ?? b['booking_id']} — ${_statusLabel(newStatus, ar)}',
+      type: 'booking_status',
+    );
+    await logAdminAction(
+      'Booking ${b['booking_id']} status',
+      oldVal: b['status']?.toString(),
+      newVal: newStatus,
+    );
+  }
+
   void _openBookingsSheet(bool ar) {
+    String statusFilter = 'all';
+    String searchQuery = '';
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      builder: (ctx) => DraggableScrollableSheet(
-        expand: false,
-        initialChildSize: 0.65,
-        builder: (_, ctrl) => ListView(
-          controller: ctrl,
-          padding: const EdgeInsets.all(16),
-          children: [
-            Text(ar ? 'الحجوزات من Supabase' : 'Supabase Bookings',
-                style: const TextStyle(
-                    fontSize: 18, fontWeight: FontWeight.w900)),
-            const SizedBox(height: 12),
-            if (_bookings.isEmpty)
-              Center(
-                  child: Padding(
-                      padding: const EdgeInsets.all(24),
-                      child: Text(ar ? 'لا توجد حجوزات بعد' : 'No bookings yet')))
-            else
-              ..._bookings.map((b) => ListTile(
-                    leading: const Icon(Icons.receipt_long, color: TIColors.teal),
-                    title: Text(b['title']?.toString() ?? b['booking_id'].toString()),
-                    subtitle: Text('${b['status']} • ${b['date_text'] ?? ''}'),
-                    trailing: PopupMenuButton<String>(
-                      onSelected: (newStatus) async {
-                        await supabase
-                            .from('bookings')
-                            .update({'status': newStatus})
-                            .eq('booking_id', b['booking_id']);
-                        final targetUid = b['user_id'] is int
-                            ? b['user_id'] as int
-                            : int.tryParse(b['user_id']?.toString() ?? '');
-                        final statusLabel = switch (newStatus) {
-                          'confirmed' => 'تم تأكيد حجزك ✅',
-                          'completed' => 'تم إكمال حجزك 🎉',
-                          'cancelled' => 'تم إلغاء حجزك ❌',
-                          _ => 'تحديث حالة الحجز',
-                        };
-                        await AppState.instance?.sendNotification(
-                          userId: targetUid,
-                          targetRole: 'customer',
-                          title: statusLabel,
-                          body: '${b['title'] ?? b['booking_id']} — الحالة الجديدة: $newStatus',
-                          type: 'booking_status',
-                        );
-                        await logAdminAction(
-                          'Booking ${b['booking_id']} status',
-                          oldVal: b['status']?.toString(),
-                          newVal: newStatus,
-                        );
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        _loadStats();
-                      },
-                      itemBuilder: (_) => const [
-                        PopupMenuItem(value: 'confirmed', child: Text('تأكيد (confirmed)')),
-                        PopupMenuItem(value: 'completed', child: Text('مكتمل (completed)')),
-                        PopupMenuItem(value: 'cancelled', child: Text('إلغاء (cancelled)')),
-                      ],
-                      child: Chip(
-                        label: Text('${b['total_yer'] ?? 0} YER'),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setSheet) {
+          final filtered = _bookings.where((b) {
+            final st = (b['status'] ?? '').toString();
+            if (statusFilter != 'all' && st != statusFilter) return false;
+            if (searchQuery.trim().isNotEmpty) {
+              final q = searchQuery.trim().toLowerCase();
+              final u = _findUserForBooking(b);
+              final haystack = [
+                b['booking_id'],
+                b['title'],
+                b['service'],
+                b['payment'],
+                u?['first_name'],
+                u?['second_name'],
+                u?['phone'],
+                u?['email'],
+              ].whereType<Object>().join(' ').toLowerCase();
+              if (!haystack.contains(q)) return false;
+            }
+            return true;
+          }).toList();
+
+          return DraggableScrollableSheet(
+            expand: false,
+            initialChildSize: 0.85,
+            maxChildSize: 0.95,
+            builder: (_, ctrl) => Column(
+              children: [
+                const SizedBox(height: 10),
+                Container(
+                  width: 42,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Colors.grey.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Text(
+                            ar
+                                ? 'إدارة الحجوزات (${filtered.length})'
+                                : 'Bookings Management (${filtered.length})',
+                            style: const TextStyle(
+                                fontSize: 18, fontWeight: FontWeight.w900),
+                          ),
+                          const Spacer(),
+                          IconButton(
+                            onPressed: () async {
+                              await _loadStats();
+                              setSheet(() {});
+                            },
+                            icon: const Icon(Icons.refresh),
+                          ),
+                        ],
                       ),
-                    ),
-                  )),
-          ],
-        ),
+                      const SizedBox(height: 8),
+                      TextField(
+                        onChanged: (v) => setSheet(() => searchQuery = v),
+                        decoration: InputDecoration(
+                          hintText: ar
+                              ? 'ابحث برقم الحجز، اسم العميل، الهاتف، أو البريد...'
+                              : 'Search booking ID, customer name, phone, email...',
+                          prefixIcon: const Icon(Icons.search, size: 20),
+                          isDense: true,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            for (final item in [
+                              ('all', ar ? 'الكل' : 'All'),
+                              ('confirmed', ar ? 'مؤكد' : 'Confirmed'),
+                              ('completed', ar ? 'مكتمل' : 'Completed'),
+                              ('cancelled', ar ? 'ملغي' : 'Cancelled'),
+                            ])
+                              Padding(
+                                padding: const EdgeInsetsDirectional.only(end: 8),
+                                child: ChoiceChip(
+                                  label: Text(item.$2),
+                                  selected: statusFilter == item.$1,
+                                  onSelected: (_) =>
+                                      setSheet(() => statusFilter = item.$1),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: filtered.isEmpty
+                      ? Center(
+                          child: Text(
+                            ar
+                                ? 'لا توجد حجوزات مطابقة'
+                                : 'No matching bookings',
+                            style:
+                                TextStyle(color: Theme.of(ctx).hintColor),
+                          ),
+                        )
+                      : ListView.builder(
+                          controller: ctrl,
+                          padding: const EdgeInsets.all(14),
+                          itemCount: filtered.length,
+                          itemBuilder: (_, i) {
+                            final b = filtered[i];
+                            final u = _findUserForBooking(b);
+                            final bid = b['booking_id']?.toString() ?? '—';
+                            final payRow = _paymentsByBooking[bid];
+                            final st = b['status']?.toString() ?? 'confirmed';
+                            final stColor = _statusColor(st);
+                            final fullName = u != null
+                                ? '${u['first_name'] ?? ''} ${u['second_name'] ?? ''}'
+                                    .trim()
+                                : '';
+                            final createdRaw =
+                                (b['created_at'] ?? '').toString();
+                            final createdShort = createdRaw.length >= 16
+                                ? createdRaw
+                                    .substring(0, 16)
+                                    .replaceFirst('T', ' ')
+                                : createdRaw;
+
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: Theme.of(ctx).cardColor,
+                                borderRadius: BorderRadius.circular(18),
+                                border: Border.all(
+                                  color: Theme.of(ctx)
+                                      .dividerColor
+                                      .withOpacity(0.5),
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // الرأس: رقم الحجز + الحالة
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: TIColors.orangeSoft,
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          bid,
+                                          style: const TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w900,
+                                            color: TIColors.orangeDeep,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 8, vertical: 3),
+                                        decoration: BoxDecoration(
+                                          color: stColor.withOpacity(0.14),
+                                          borderRadius:
+                                              BorderRadius.circular(8),
+                                        ),
+                                        child: Text(
+                                          _statusLabel(st, ar),
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            fontWeight: FontWeight.w800,
+                                            color: stColor,
+                                          ),
+                                        ),
+                                      ),
+                                      const Spacer(),
+                                      Text(
+                                        '${b['total_yer'] ?? 0} YER',
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w900,
+                                          fontSize: 14.5,
+                                          color: TIColors.orangeDeep,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // الخدمة والعنوان
+                                  Text(
+                                    b['title']?.toString() ?? bid,
+                                    style: const TextStyle(
+                                      fontSize: 15.5,
+                                      fontWeight: FontWeight.w900,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    '${_serviceLabel(b['service']?.toString(), ar)} • ${b['date_text'] ?? '—'}',
+                                    style: TextStyle(
+                                      fontSize: 12.5,
+                                      color: Theme.of(ctx).hintColor,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 10),
+                                  // بطاقة بيانات العميل
+                                  Container(
+                                    width: double.infinity,
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: Theme.of(ctx)
+                                          .scaffoldBackgroundColor,
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            const Icon(Icons.person_outline,
+                                                size: 16,
+                                                color: TIColors.orangeDeep),
+                                            const SizedBox(width: 6),
+                                            Expanded(
+                                              child: Text(
+                                                '${ar ? 'العميل' : 'Customer'}: ${fullName.isEmpty ? '#${b['user_id'] ?? '—'}' : fullName}',
+                                                style: const TextStyle(
+                                                    fontWeight: FontWeight.w800,
+                                                    fontSize: 13),
+                                              ),
+                                            ),
+                                            if (u?['age'] != null)
+                                              Text(
+                                                '${u!['age']} ${ar ? 'سنة' : 'yrs'}',
+                                                style: TextStyle(
+                                                    fontSize: 11.5,
+                                                    color: Theme.of(ctx)
+                                                        .hintColor),
+                                              ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 4),
+                                        if (u?['phone'] != null &&
+                                            u!['phone'].toString().isNotEmpty)
+                                          Text(
+                                            '${ar ? 'الهاتف' : 'Phone'}: ${u['phone']}',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        if (u?['email'] != null &&
+                                            u!['email'].toString().isNotEmpty)
+                                          Text(
+                                            '${ar ? 'البريد' : 'Email'}: ${u['email']}',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  // تفاصيل الدفع والوقت
+                                  Wrap(
+                                    spacing: 12,
+                                    runSpacing: 4,
+                                    children: [
+                                      Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: [
+                                          const Icon(Icons.payment_rounded,
+                                              size: 15,
+                                              color: TIColors.cardRent),
+                                          const SizedBox(width: 4),
+                                          Text(
+                                            '${ar ? 'الدفع' : 'Payment'}: ${_paymentLabel(b['payment']?.toString(), ar)}',
+                                            style: const TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700),
+                                          ),
+                                        ],
+                                      ),
+                                      if (payRow?['status'] != null)
+                                        Text(
+                                          '(${payRow!['status']})',
+                                          style: TextStyle(
+                                              fontSize: 11.5,
+                                              color:
+                                                  Theme.of(ctx).hintColor),
+                                        ),
+                                      if (createdShort.isNotEmpty)
+                                        Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(Icons.access_time,
+                                                size: 14,
+                                                color:
+                                                    Theme.of(ctx).hintColor),
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              createdShort,
+                                              style: TextStyle(
+                                                  fontSize: 11.5,
+                                                  color:
+                                                      Theme.of(ctx).hintColor),
+                                            ),
+                                          ],
+                                        ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  // أزرار التحكم بالحالة مباشرة
+                                  Row(
+                                    children: [
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: st == 'confirmed'
+                                              ? null
+                                              : () async {
+                                                  await _updateBookingStatus(
+                                                      b, 'confirmed', ar);
+                                                  await _loadStats();
+                                                  setSheet(() {});
+                                                },
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(0, 36),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6),
+                                            foregroundColor: TIColors.success,
+                                            side: const BorderSide(
+                                                color: TIColors.success),
+                                          ),
+                                          child: Text(
+                                            ar ? 'تأكيد' : 'Confirm',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: st == 'completed'
+                                              ? null
+                                              : () async {
+                                                  await _updateBookingStatus(
+                                                      b, 'completed', ar);
+                                                  await _loadStats();
+                                                  setSheet(() {});
+                                                },
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(0, 36),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6),
+                                            foregroundColor: TIColors.cardRent,
+                                            side: const BorderSide(
+                                                color: TIColors.cardRent),
+                                          ),
+                                          child: Text(
+                                            ar ? 'إكمال' : 'Complete',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 6),
+                                      Expanded(
+                                        child: OutlinedButton(
+                                          onPressed: st == 'cancelled'
+                                              ? null
+                                              : () async {
+                                                  await _updateBookingStatus(
+                                                      b, 'cancelled', ar);
+                                                  await _loadStats();
+                                                  setSheet(() {});
+                                                },
+                                          style: OutlinedButton.styleFrom(
+                                            minimumSize: const Size(0, 36),
+                                            padding: const EdgeInsets.symmetric(
+                                                horizontal: 6),
+                                            foregroundColor: TIColors.danger,
+                                            side: const BorderSide(
+                                                color: TIColors.danger),
+                                          ),
+                                          child: Text(
+                                            ar ? 'إلغاء' : 'Cancel',
+                                            style:
+                                                const TextStyle(fontSize: 12),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
       ),
     );
   }
