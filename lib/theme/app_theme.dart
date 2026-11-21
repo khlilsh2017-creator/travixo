@@ -127,7 +127,7 @@ class AppTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: TIColors.orange,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 60), // أكبر من 52
+          minimumSize: const Size(88, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18), // أكبر من 14
           ),
@@ -142,7 +142,7 @@ class AppTheme {
         style: FilledButton.styleFrom(
           backgroundColor: TIColors.orange,
           foregroundColor: Colors.white,
-          minimumSize: const Size(double.infinity, 60),
+          minimumSize: const Size(88, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
@@ -157,7 +157,7 @@ class AppTheme {
         style: OutlinedButton.styleFrom(
           foregroundColor: TIColors.orange,
           side: const BorderSide(color: TIColors.orange, width: 1.5),
-          minimumSize: const Size(double.infinity, 60),
+          minimumSize: const Size(88, 48),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(18),
           ),
