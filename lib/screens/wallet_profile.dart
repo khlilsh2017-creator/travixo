@@ -217,12 +217,38 @@ class ProfileTab extends StatelessWidget {
               // الصورة الشخصية — قابلة للتغيير والحذف
               const AvatarPicker(radius: 44),
               const SizedBox(height: 12),
-              Text(user?.fullName ?? '',
+              Text(
+                  user?.fullName ?? (l.isArabic ? 'زائر' : 'Guest'),
                   style: const TextStyle(
                       fontSize: 20, fontWeight: FontWeight.w900)),
               if (user != null)
                 Text('${user.age} ${l.t('years')}',
-                    style: TextStyle(color: Theme.of(context).hintColor)),
+                    style: TextStyle(color: Theme.of(context).hintColor))
+              else ...[
+                const SizedBox(height: 6),
+                Text(
+                  l.isArabic
+                      ? 'سجّل دخولك لحفظ حجوزاتك ومحفظتك'
+                      : 'Sign in to save your bookings & wallet',
+                  style: TextStyle(
+                      fontSize: 13, color: Theme.of(context).hintColor),
+                ),
+                const SizedBox(height: 12),
+                FilledButton.icon(
+                  onPressed: () {
+                    Haptics.light();
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                          builder: (_) => const UserTypeScreen()),
+                    );
+                  },
+                  icon: const Icon(Icons.login_rounded, size: 18),
+                  label: Text(l.isArabic
+                      ? 'تسجيل الدخول / إنشاء حساب'
+                      : 'Sign In / Create Account'),
+                ),
+              ],
               const SizedBox(height: 8),
               // شارة العضوية
               Container(
@@ -253,13 +279,14 @@ class ProfileTab extends StatelessWidget {
           _item(context, Icons.mail_outline,
               '${l.t('email')}: ${user?.email ?? user?.phone ?? '—'}', null),
           // تعديل البيانات الشخصية — الاسم والبريد والرقم
-          _item(context, Icons.edit_outlined, l.t('editData'), () {
-            Haptics.light();
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const EditProfileScreen()),
-            );
-          }),
+          if (user != null)
+            _item(context, Icons.edit_outlined, l.t('editData'), () {
+              Haptics.light();
+              Navigator.push(
+                context,
+                MaterialPageRoute(builder: (_) => const EditProfileScreen()),
+              );
+            }),
           _item(context, Icons.currency_exchange, l.t('currency'), () {
             Haptics.light();
             _pickCurrency(context);
@@ -292,10 +319,10 @@ class ProfileTab extends StatelessWidget {
               MaterialPageRoute(builder: (_) => const SupportScreen()),
             );
           }),
-          _item(context, Icons.logout, l.t('logout'), () {
-            _logout(context);
-          },
-              danger: true),
+          if (user != null)
+            _item(context, Icons.logout, l.t('logout'), () {
+              _logout(context);
+            }, danger: true),
           const SizedBox(height: 16),
           Text(l.t('demoNote'),
               textAlign: TextAlign.center,

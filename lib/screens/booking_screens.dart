@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 import '../data/models.dart';
@@ -7,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
 import 'main_shell.dart';
+import 'auth_screens.dart';
 
 /// ============ ورقة الحجز والدفع (Bottom Sheet) ============
 class BookingSheet extends StatefulWidget {
@@ -44,6 +44,36 @@ class _BookingSheetState extends State<BookingSheet> {
   void _confirm() {
     final l = context.l;
     final state = context.read<AppState>();
+
+    if (state.user == null) {
+      showDialog(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: Text(l.isArabic ? 'تسجيل الدخول مطلوب' : 'Sign In Required'),
+          content: Text(
+            l.isArabic
+                ? 'يرجى تسجيل الدخول أو إنشاء حساب لإتمام الحجز وحفظه في حسابك.'
+                : 'Please sign in or create an account to complete and save your booking.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d),
+              child: Text(l.t('cancel')),
+            ),
+            FilledButton(
+              onPressed: () {
+                Navigator.pop(d);
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const UserTypeScreen()),
+                );
+              },
+              child: Text(l.isArabic ? 'تسجيل الدخول الآن' : 'Sign In Now'),
+            ),
+          ],
+        ),
+      );
+      return;
+    }
 
     if ((_pay == PaymentMethod.kuraimi || _pay == PaymentMethod.digitalWallet) &&
         _ref.text.trim().isEmpty) {

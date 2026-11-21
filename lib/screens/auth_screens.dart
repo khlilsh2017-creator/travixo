@@ -16,6 +16,9 @@ class UserTypeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l;
     return Scaffold(
+      appBar: Navigator.of(context).canPop()
+          ? AppBar(backgroundColor: Colors.transparent, elevation: 0)
+          : null,
       body: SafeArea(
         child: Padding(
           padding: const EdgeInsets.all(24),

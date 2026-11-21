@@ -5,7 +5,6 @@ import '../theme/app_theme.dart';
 import '../state/app_state.dart';
 import 'onboarding_screen.dart';
 import 'main_shell.dart';
-import 'auth_screens.dart';
 import 'developer_dashboard.dart';
 import 'package:provider/provider.dart';
 
@@ -49,11 +48,9 @@ class _SplashScreenState extends State<SplashScreen> with SingleTickerProviderSt
     final state = context.read<AppState>();
     final Widget nextPage = !state.hasSeenOnboarding
         ? const OnboardingScreen()
-        : state.user == null
-            ? const UserTypeScreen()
-            : (state.user!.role == 'developer'
-                ? const DeveloperDashboard()
-                : const MainShell());
+        : (state.user?.role == 'developer'
+            ? const DeveloperDashboard()
+            : const MainShell());
     
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(

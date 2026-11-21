@@ -3,7 +3,6 @@ import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
 import '../state/app_state.dart';
 import '../theme/app_theme.dart';
-import 'auth_screens.dart';
 import 'main_shell.dart';
 
 class OnboardingScreen extends StatefulWidget {
@@ -24,7 +23,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
     } else {
       context.read<AppState>().markOnboardingSeen();
       Navigator.of(context).pushAndRemoveUntil(
-          MaterialPageRoute(builder: (_) => context.read<AppState>().user != null ? const MainShell() : const UserTypeScreen()), (r) => false);
+          MaterialPageRoute(builder: (_) => const MainShell()), (r) => false);
     }
   }
 
@@ -113,7 +112,7 @@ class _OnboardingScreenState extends State<OnboardingScreen> {
                       Navigator.of(context)
                           .pushAndRemoveUntil(
                               MaterialPageRoute(
-                                  builder: (_) => context.read<AppState>().user != null ? const MainShell() : const UserTypeScreen()),
+                                  builder: (_) => const MainShell()),
                               (r) => false);
                     },
                     child: Text(l.t('skip'))),
