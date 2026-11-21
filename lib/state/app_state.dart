@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:math';
 import 'package:flutter/material.dart';
@@ -37,6 +38,9 @@ class AppState extends ChangeNotifier {
   double walletBalanceYer = 100000; // رصيد تجريبي ترحيبي (Demo)
   Set<String> favoriteIds = {};
   List<String> notifications = [];
+  List<Map<String, dynamic>> liveNotifications = [];
+  Set<String> _readNotifIds = {};
+  StreamSubscription<List<Map<String, dynamic>>>? _notifSub;
   List<Hotel> liveHotels = [];
   List<Car> liveCars = [];
   List<Offer> liveOffers = [];
@@ -49,6 +53,18 @@ class AppState extends ChangeNotifier {
   Membership get membership => user?.membership ?? Membership.basic;
 
   int? get _dbUserId => user == null ? null : int.tryParse(user!.id);
+
+  int get unreadNotificationsCount {
+    return liveNotifications.where((n) {
+      final nid = n['notification_id']?.toString() ?? '';
+      return n['is_read'] != true && !_readNotifIds.contains(nid);
+    }).length;
+  }
+
+  bool isNotificationRead(Map<String, dynamic> n) {
+    final nid = n['notification_id']?.toString() ?? '';
+    return n['is_read'] == true || _readNotifIds.contains(nid);
+  }
 
   // ============ التحميل والحفظ ============
   void load() {
@@ -73,9 +89,11 @@ class AppState extends ChangeNotifier {
     walletBalanceYer = prefs.getDouble('wallet') ?? 100000;
     favoriteIds = (prefs.getStringList('favorites') ?? []).toSet();
     notifications = prefs.getStringList('notifications') ?? [];
+    _readNotifIds = (prefs.getStringList('read_notif_ids') ?? []).toSet();
     notifyListeners();
     syncFromSupabase();
     fetchLiveCatalog();
+    startNotificationsStream();
   }
 
   Future<void> syncFromSupabase() async {
@@ -372,6 +390,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     syncFromSupabase();
     fetchLiveCatalog();
+    startNotificationsStream();
   }
 
   // تعديل الملف الشخصي — يدعم الاسم والإيميل والرقم والصورة
@@ -414,6 +433,7 @@ class AppState extends ChangeNotifier {
     user = null;
     prefs.remove('user');
     notifyListeners();
+    startNotificationsStream();
   }
 
   // ============ المفضلة ============
@@ -544,6 +564,19 @@ class AppState extends ChangeNotifier {
         'payment': b.payment.name,
         'status': b.status.name,
       });
+      await sendNotification(
+        targetRole: 'developer',
+        title: 'طلب حجز جديد: ${b.title}',
+        body: 'العميل: ${user?.fullName ?? 'عميل'} • المبلغ: ${b.totalYer.toStringAsFixed(0)} YER • رقم: ${b.id}',
+        type: 'new_booking',
+      );
+      await sendNotification(
+        userId: uid,
+        targetRole: 'customer',
+        title: 'تم استلام حجزك: ${b.title}',
+        body: 'رقم الحجز: ${b.id} • الإجمالي: ${b.totalYer.toStringAsFixed(0)} YER',
+        type: 'booking_status',
+      );
       await supabase.from('payments').insert({
         'booking_id': b.id,
         'method': b.payment.name,
@@ -596,5 +629,87 @@ class AppState extends ChangeNotifier {
     final d = DateTime.now();
     String two(int n) => n.toString().padLeft(2, '0');
     return '${two(d.day)}/${two(d.month)}/${d.year} ${two(d.hour)}:${two(d.minute)}';
+  }
+
+  // ============ نظام الإشعارات اللحظي (Supabase Realtime) ============
+  void startNotificationsStream() {
+    _notifSub?.cancel();
+    try {
+      _notifSub = supabase
+          .from('notifications')
+          .stream(primaryKey: ['notification_id'])
+          .order('created_at', ascending: false)
+          .listen(
+            (rows) {
+              final role = user?.role ?? 'customer';
+              final uid = _dbUserId;
+              final filtered = rows.where((n) {
+                final tr = (n['target_role'] ?? 'all').toString();
+                final targetUid = n['user_id'];
+                if (role == 'developer') {
+                  return tr == 'developer' || tr == 'all';
+                }
+                if (tr == 'all') return true;
+                if (tr == 'customer') {
+                  return targetUid == null || (uid != null && targetUid == uid);
+                }
+                return false;
+              }).map((e) => Map<String, dynamic>.from(e)).toList();
+              liveNotifications = filtered;
+              notifyListeners();
+            },
+            onError: (_) {},
+          );
+    } catch (_) {}
+  }
+
+  Future<void> sendNotification({
+    int? userId,
+    String targetRole = 'all',
+    required String title,
+    required String body,
+    String type = 'general',
+  }) async {
+    try {
+      await supabase.from('notifications').insert({
+        if (userId != null) 'user_id': userId,
+        'target_role': targetRole,
+        'title': title,
+        'body': body,
+        'type': type,
+        'is_read': false,
+      });
+    } catch (_) {}
+  }
+
+  Future<void> markAllNotificationsRead() async {
+    for (final n in liveNotifications) {
+      final nid = n['notification_id']?.toString();
+      if (nid != null && nid.isNotEmpty) {
+        _readNotifIds.add(nid);
+      }
+    }
+    await prefs.setStringList('read_notif_ids', _readNotifIds.toList());
+    notifyListeners();
+    try {
+      final uid = _dbUserId;
+      if (user?.role == 'developer') {
+        await supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('target_role', 'developer');
+      } else if (uid != null) {
+        await supabase
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('user_id', uid);
+      }
+    } catch (_) {}
+  }
+
+  @override
+  void dispose() {
+    _notifSub?.cancel();
+    super.dispose();
   }
 }

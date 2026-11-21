@@ -13,6 +13,7 @@ import 'best_places_screen.dart';
 import 'details_screens.dart';
 import 'haptic.dart';
 import 'live_map_screen.dart';
+import 'notifications_sheet.dart';
 import 'trip_planner_screen.dart';
 
 class HomeScreen extends StatelessWidget {
@@ -166,11 +167,7 @@ class HomeScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(width: 6),
-          _miniPill(
-            context,
-            onTap: () => _openNotifications(context, l, state),
-            child: const Icon(Icons.notifications_outlined, size: 17),
-          ),
+          const NotificationBellButton(asPill: true),
         ],
       ),
     );
@@ -192,53 +189,6 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         child: child,
-      ),
-    );
-  }
-
-  void _openNotifications(
-      BuildContext context, AppLocalizations l, AppState state) {
-    Haptics.light();
-    showModalBottomSheet(
-      context: context,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(22)),
-      ),
-      builder: (_) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(20),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                l.t('notifications'),
-                style:
-                    const TextStyle(fontSize: 18, fontWeight: FontWeight.w800),
-              ),
-              const SizedBox(height: 12),
-              if (state.notifications.isEmpty)
-                Text(
-                  l.t('noNotifications'),
-                  style: TextStyle(color: Theme.of(context).hintColor),
-                )
-              else
-                ...state.notifications.take(6).map(
-                      (n) => Padding(
-                        padding: const EdgeInsets.only(bottom: 10),
-                        child: Row(
-                          children: [
-                            const Icon(Icons.notifications_active,
-                                color: TIColors.orange, size: 18),
-                            const SizedBox(width: 8),
-                            Expanded(child: Text(n)),
-                          ],
-                        ),
-                      ),
-                    ),
-            ],
-          ),
-        ),
       ),
     );
   }

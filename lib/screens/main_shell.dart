@@ -10,6 +10,7 @@ import 'live_map_screen.dart';
 import 'booking_screens.dart';
 import 'wallet_profile.dart';
 import 'onboarding_screen.dart';
+import 'notifications_sheet.dart';
 
 /// الهيكل الرئيسي للتطبيق — متجاوب مع الجوال والويب/سطح المكتب
 /// Mobile: Bottom Navigation (5 تبويبات)
@@ -223,6 +224,8 @@ class _MainShellState extends State<MainShell> {
                                 color: isDark ? TIColors.gold : null,
                               ),
                             ),
+                            const SizedBox(width: 8),
+                            const NotificationBellButton(asPill: true),
                             const SizedBox(width: 8),
                             InkWell(
                               borderRadius: BorderRadius.circular(10),

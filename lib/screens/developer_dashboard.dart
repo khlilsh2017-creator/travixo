@@ -9,6 +9,7 @@ import '../theme/app_theme.dart';
 import 'auth_screens.dart';
 import 'admin_crud_screens.dart';
 import 'support_chat_screen.dart';
+import 'notifications_sheet.dart';
 
 /// Travixo — Admin/Developer Portal connected to Supabase
 class DeveloperDashboard extends StatefulWidget {
@@ -137,6 +138,22 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
                             .from('bookings')
                             .update({'status': newStatus})
                             .eq('booking_id', b['booking_id']);
+                        final targetUid = b['user_id'] is int
+                            ? b['user_id'] as int
+                            : int.tryParse(b['user_id']?.toString() ?? '');
+                        final statusLabel = switch (newStatus) {
+                          'confirmed' => 'تم تأكيد حجزك ✅',
+                          'completed' => 'تم إكمال حجزك 🎉',
+                          'cancelled' => 'تم إلغاء حجزك ❌',
+                          _ => 'تحديث حالة الحجز',
+                        };
+                        await AppState.instance?.sendNotification(
+                          userId: targetUid,
+                          targetRole: 'customer',
+                          title: statusLabel,
+                          body: '${b['title'] ?? b['booking_id']} — الحالة الجديدة: $newStatus',
+                          type: 'booking_status',
+                        );
                         await logAdminAction(
                           'Booking ${b['booking_id']} status',
                           oldVal: b['status']?.toString(),
@@ -236,6 +253,160 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     );
   }
 
+  Future<void> _openSendNotificationDialog(bool ar) async {
+    final titleCtrl = TextEditingController();
+    final bodyCtrl = TextEditingController();
+    String notifType = 'offer';
+    int? selectedUserId; // null = broadcast to all customers
+
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => StatefulBuilder(
+          builder: (ctx, setSheet) => Padding(
+            padding: EdgeInsets.fromLTRB(
+              20,
+              20,
+              20,
+              MediaQuery.of(ctx).viewInsets.bottom + 24,
+            ),
+            child: SingleChildScrollView(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ar ? 'إرسال إشعار يدوي للعملاء' : 'Send Notification to Customers',
+                    style: const TextStyle(
+                        fontSize: 18, fontWeight: FontWeight.w900),
+                  ),
+                  const SizedBox(height: 14),
+                  DropdownButtonFormField<int?>(
+                    value: selectedUserId,
+                    decoration: InputDecoration(
+                      labelText: ar ? 'المستلم' : 'Recipient',
+                    ),
+                    items: [
+                      DropdownMenuItem<int?>(
+                        value: null,
+                        child: Text(ar ? 'جميع العملاء (إشعار عام)' : 'All Customers (Broadcast)'),
+                      ),
+                      ..._users
+                          .where((u) => (u['role'] ?? 'customer') != 'developer')
+                          .map((u) {
+                        final uid = u['user_id'] is int
+                            ? u['user_id'] as int
+                            : int.tryParse(u['user_id']?.toString() ?? '');
+                        final name = '${u['first_name'] ?? ''} ${u['second_name'] ?? ''}'.trim();
+                        return DropdownMenuItem<int?>(
+                          value: uid,
+                          child: Text(
+                            name.isEmpty ? '#$uid' : '$name (#$uid)',
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        );
+                      }),
+                    ],
+                    onChanged: (v) => setSheet(() => selectedUserId = v),
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<String>(
+                    value: notifType,
+                    decoration: InputDecoration(
+                      labelText: ar ? 'نوع الإشعار' : 'Notification Type',
+                    ),
+                    items: [
+                      DropdownMenuItem(
+                        value: 'offer',
+                        child: Text(ar ? 'عرض وتخفيض (Offer)' : 'Offer / Promo'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'booking_status',
+                        child: Text(ar ? 'تحديث حجز (Booking)' : 'Booking Update'),
+                      ),
+                      DropdownMenuItem(
+                        value: 'general',
+                        child: Text(ar ? 'تنبيه عام (General)' : 'General Alert'),
+                      ),
+                    ],
+                    onChanged: (v) => setSheet(() => notifType = v ?? 'offer'),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: titleCtrl,
+                    decoration: InputDecoration(
+                      labelText: ar ? 'عنوان الإشعار' : 'Title',
+                      hintText: ar ? 'مثال: خصم 25% على فنادق صنعاء!' : 'e.g. 25% off Sanaa hotels!',
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: bodyCtrl,
+                    maxLines: 3,
+                    decoration: InputDecoration(
+                      labelText: ar ? 'نص الإشعار' : 'Message Body',
+                      hintText: ar ? 'اكتب تفاصيل العرض أو التنبيه هنا...' : 'Write details here...',
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FilledButton.icon(
+                      onPressed: () async {
+                        final t = titleCtrl.text.trim();
+                        final b = bodyCtrl.text.trim();
+                        if (t.isEmpty || b.isEmpty) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(
+                              content: Text(ar
+                                  ? 'يرجى كتابة العنوان ونص الإشعار'
+                                  : 'Please enter title and message'),
+                            ),
+                          );
+                          return;
+                        }
+                        await AppState.instance?.sendNotification(
+                          userId: selectedUserId,
+                          targetRole: selectedUserId == null ? 'all' : 'customer',
+                          title: t,
+                          body: b,
+                          type: notifType,
+                        );
+                        await logAdminAction(
+                          'Send manual notification',
+                          newVal: '$t (${selectedUserId == null ? "all" : "user #$selectedUserId"})',
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(ar
+                                  ? 'تم إرسال الإشعار بنجاح ✅'
+                                  : 'Notification sent successfully'),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.send_rounded, size: 18),
+                      label: Text(ar ? 'إرسال الإشعار الآن' : 'Send Now'),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+    } finally {
+      titleCtrl.dispose();
+      bodyCtrl.dispose();
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final l = context.l;
@@ -259,21 +430,8 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     ];
 
     final sections = [
-      (Icons.cloud_upload, bi('مزامنة البيانات المحلية لقاعدة البيانات', 'Seed Local Data to Supabase'), () async {
-        final messenger = ScaffoldMessenger.of(context);
-        messenger.showSnackBar(
-          SnackBar(content: Text(bi('جارٍ رفع البيانات المحلية إلى Supabase...', 'Syncing local catalog to Supabase...'))),
-        );
-        try {
-          final msg = await state.seedLocalCatalogToSupabase();
-          if (!mounted) return;
-          messenger.showSnackBar(SnackBar(content: Text(msg)));
-          _loadStats();
-        } catch (e) {
-          if (!mounted) return;
-          messenger.showSnackBar(SnackBar(content: Text('خطأ: $e')));
-        }
-      }),
+      (Icons.campaign_rounded, bi('إرسال إشعار يدوي للعملاء', 'Send Notification to Customers'),
+          () => _openSendNotificationDialog(ar)),
       (Icons.people, bi('المستخدمون المسجلون', 'Registered Users'),
           () => _openUsersSheet(ar)),
       (Icons.receipt_long, bi('إدارة الحجوزات', 'Bookings'),
@@ -315,6 +473,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
       appBar: AppBar(
         title: const Text('Travixo — Admin'),
         actions: [
+          const NotificationBellButton(),
           IconButton(
             onPressed: _loadStats,
             icon: const Icon(Icons.refresh),

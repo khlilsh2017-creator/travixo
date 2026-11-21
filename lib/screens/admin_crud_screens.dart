@@ -1296,7 +1296,13 @@ class _AdminOffersScreenState extends State<AdminOffersScreen> {
                           if (item == null) {
                             await supabase.from('offers').insert(data);
                             await AppState.instance?.fetchLiveCatalog();
-      await logAdminAction('Add offer',
+                            await AppState.instance?.sendNotification(
+                              targetRole: 'all',
+                              title: 'عرض جديد: ${title.text.trim()}',
+                              body: '${subtitle.text.trim()} (خصم ${data['discount']}%)',
+                              type: 'offer',
+                            );
+                            await logAdminAction('Add offer',
                                 newVal: title.text.trim());
                           } else {
                             await supabase

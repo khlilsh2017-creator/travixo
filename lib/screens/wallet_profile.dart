@@ -19,6 +19,86 @@ class WalletTab extends StatelessWidget {
     final l = context.l;
     final state = context.watch<AppState>();
 
+    if (state.user == null) {
+      return Scaffold(
+        appBar: AppBar(title: Text(l.t('wallet'))),
+        body: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 420),
+            child: Padding(
+              padding: const EdgeInsets.all(24),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                      color: Theme.of(context).dividerColor.withOpacity(.5)),
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Container(
+                      width: 68,
+                      height: 68,
+                      decoration: const BoxDecoration(
+                        color: TIColors.orangeSoft,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.account_balance_wallet_outlined,
+                        size: 34,
+                        color: TIColors.orangeDeep,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      l.isArabic ? 'يجب التسجيل أولاً' : 'Sign In Required',
+                      textAlign: TextAlign.center,
+                      style: const TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      l.isArabic
+                          ? 'يرجى تسجيل الدخول أو إنشاء حساب لعرض رصيد المحفظة وشحنها ومتابعة عملياتك المالية.'
+                          : 'Please sign in or create an account to view your wallet balance, top up, and track transactions.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        height: 1.5,
+                        color: Theme.of(context).hintColor,
+                      ),
+                    ),
+                    const SizedBox(height: 20),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FilledButton.icon(
+                        onPressed: () {
+                          Haptics.light();
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                                builder: (_) => const UserTypeScreen()),
+                          );
+                        },
+                        icon: const Icon(Icons.login_rounded, size: 18),
+                        label: Text(l.isArabic
+                            ? 'تسجيل الدخول / إنشاء حساب'
+                            : 'Sign In / Create Account'),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
     return Scaffold(
       appBar: AppBar(title: Text(l.t('wallet'))),
       body: ListView(

@@ -1,3 +1,4 @@
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../l10n/app_localizations.dart';
@@ -140,9 +141,11 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   final _phone = TextEditingController();
   final _otp = TextEditingController();
   final _email = TextEditingController();
-  final _pass = TextEditingController();
-  bool _otpSent = false;
+  final _emailOtp = TextEditingController();
+  final bool _otpSent = false;
   bool _emailMode = false;
+  bool _emailOtpSent = false;
+  bool _busy = false;
 
   Future<void> _sendOtp() async {
     final l = context.l;
@@ -185,21 +188,74 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
         builder: (_) => ProfileSetupScreen(phone: _phone.text.trim())));
   }
 
-  Future<void> _emailLogin() async {
+  Future<void> _sendEmailOtp() async {
     final l = context.l;
     final email = _email.text.trim();
-    if (!email.contains('@') || _pass.text.length < 4) {
+    if (!email.contains('@') || !email.contains('.')) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(l.t('errEmail'))));
       return;
     }
+    setState(() => _busy = true);
     try {
+      await supabase.auth.signInWithOtp(
+        email: email,
+        shouldCreateUser: true,
+      );
+      if (!mounted) return;
+      setState(() {
+        _emailOtpSent = true;
+        _busy = false;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.isArabic
+              ? 'تم إرسال رمز التحقق (OTP) إلى بريدك الإلكتروني'
+              : 'Verification code (OTP) sent to your email'),
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.isArabic
+              ? 'تعذّر إرسال الرمز: $e'
+              : 'Failed to send OTP: $e'),
+        ),
+      );
+    }
+  }
+
+  Future<void> _verifyEmailOtp() async {
+    final l = context.l;
+    final email = _email.text.trim();
+    final token = _emailOtp.text.trim();
+    if (token.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.isArabic
+              ? 'أدخل رمز التحقق المكون من 6 أرقام'
+              : 'Enter the 6-digit verification code'),
+        ),
+      );
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await supabase.auth.verifyOTP(
+        email: email,
+        token: token,
+        type: OtpType.email,
+      );
       final existing = await supabase
           .from('users')
           .select()
           .eq('email', email)
           .maybeSingle();
-      if (existing != null && mounted) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      if (existing != null) {
         context.read<AppState>().login(AppUser(
               id: existing['user_id'].toString(),
               firstName: existing['first_name']?.toString() ?? '',
@@ -214,10 +270,19 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
             MaterialPageRoute(builder: (_) => const MainShell()), (r) => false);
         return;
       }
-    } catch (_) {}
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ProfileSetupScreen(email: email)));
+      Navigator.of(context).pushReplacement(MaterialPageRoute(
+          builder: (_) => ProfileSetupScreen(email: email)));
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _busy = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(l.isArabic
+              ? 'رمز التحقق غير صحيح أو منتهي الصلاحية'
+              : 'Invalid or expired verification code'),
+        ),
+      );
+    }
   }
 
   @override
@@ -225,7 +290,7 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
     _phone.dispose();
     _otp.dispose();
     _email.dispose();
-    _pass.dispose();
+    _emailOtp.dispose();
     super.dispose();
   }
 
@@ -292,35 +357,81 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
             ] else ...[
               TextField(
                 controller: _email,
+                enabled: !_emailOtpSent,
                 keyboardType: TextInputType.emailAddress,
                 decoration: InputDecoration(
                     labelText: l.t('email'),
+                    hintText: 'name@example.com',
                     prefixIcon: const Icon(Icons.mail_outline)),
               ),
               const SizedBox(height: 16),
-              TextField(
-                controller: _pass,
-                obscureText: true,
-                decoration: InputDecoration(
-                    labelText: l.t('password'),
-                    prefixIcon: const Icon(Icons.lock_outline)),
-              ),
-              const SizedBox(height: 8),
-              Align(
-                alignment: AlignmentDirectional.centerEnd,
-                child: TextButton(
-                    onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(l.t('demoNote'))),
+              if (!_emailOtpSent) ...[
+                ElevatedButton.icon(
+                  onPressed: _busy ? null : _sendEmailOtp,
+                  icon: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Icon(Icons.mark_email_read_outlined, size: 19),
+                  label: Text(l.isArabic
+                      ? 'إرسال رمز التحقق للبريد (OTP)'
+                      : 'Send Email OTP Code'),
+                ),
+              ] else ...[
+                TextField(
+                  controller: _emailOtp,
+                  keyboardType: TextInputType.number,
+                  textAlign: TextAlign.center,
+                  maxLength: 6,
+                  style: const TextStyle(
+                      fontSize: 22, fontWeight: FontWeight.w800, letterSpacing: 8),
+                  decoration: InputDecoration(
+                    labelText: l.isArabic ? 'رمز التحقق (6 أرقام)' : '6-Digit Code',
+                    prefixIcon: const Icon(Icons.verified_user_outlined),
+                    counterText: '',
+                  ),
+                ),
+                const SizedBox(height: 14),
+                ElevatedButton(
+                  onPressed: _busy ? null : _verifyEmailOtp,
+                  child: _busy
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : Text(l.isArabic ? 'تحقق وتسجيل الدخول' : 'Verify & Sign In'),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    TextButton(
+                      onPressed: _busy ? null : _sendEmailOtp,
+                      child: Text(l.isArabic ? 'إعادة إرسال الرمز' : 'Resend Code'),
                     ),
-                    child: Text(l.t('forgotPass'),
-                        style: const TextStyle(fontSize: 13))),
-              ),
-              const SizedBox(height: 8),
-              ElevatedButton(
-                  onPressed: _emailLogin, child: Text(l.t('login'))),
+                    TextButton(
+                      onPressed: _busy
+                          ? null
+                          : () => setState(() {
+                                _emailOtpSent = false;
+                                _emailOtp.clear();
+                              }),
+                      child: Text(l.isArabic ? 'تغيير البريد' : 'Change Email'),
+                    ),
+                  ],
+                ),
+              ],
               const SizedBox(height: 20),
               OutlinedButton.icon(
-                onPressed: () => setState(() => _emailMode = false),
+                onPressed: () => setState(() {
+                  _emailMode = false;
+                  _emailOtpSent = false;
+                }),
                 icon: const Icon(Icons.phone),
                 label: Text(l.t('phoneLogin')),
               ),
