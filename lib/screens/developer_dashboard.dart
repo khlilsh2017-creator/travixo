@@ -260,17 +260,18 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
 
     final sections = [
       (Icons.cloud_upload, bi('مزامنة البيانات المحلية لقاعدة البيانات', 'Seed Local Data to Supabase'), () async {
-        ScaffoldMessenger.of(context).showSnackBar(
+        final messenger = ScaffoldMessenger.of(context);
+        messenger.showSnackBar(
           SnackBar(content: Text(bi('جارٍ رفع البيانات المحلية إلى Supabase...', 'Syncing local catalog to Supabase...'))),
         );
         try {
           final msg = await state.seedLocalCatalogToSupabase();
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          messenger.showSnackBar(SnackBar(content: Text(msg)));
           _loadStats();
         } catch (e) {
           if (!mounted) return;
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+          messenger.showSnackBar(SnackBar(content: Text('خطأ: $e')));
         }
       }),
       (Icons.people, bi('المستخدمون المسجلون', 'Registered Users'),
@@ -413,13 +414,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
                       color: Theme.of(context).dividerColor.withOpacity(.4)),
                 ),
                 child: ListTile(
-                  onTap: s.$3 ??
-                      () => ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                                content: Text(bi(
-                                    'متصل بجدول Supabase — يمكنك إدارته من SQL/Table Editor حالياً',
-                                    'Connected to Supabase — manage via Table Editor'))),
-                          ),
+                  onTap: s.$3,
                   leading: Icon(s.$1, color: TIColors.teal),
                   title: Text(s.$2,
                       style: const TextStyle(
