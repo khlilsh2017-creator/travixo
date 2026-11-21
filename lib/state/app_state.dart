@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
+import '../supabase.dart';
 
 class AppState extends ChangeNotifier {
   final SharedPreferences prefs;
@@ -42,6 +43,8 @@ class AppState extends ChangeNotifier {
   bool get isDark => _themeMode == ThemeMode.dark;
   Membership get membership => user?.membership ?? Membership.basic;
 
+  int? get _dbUserId => user == null ? null : int.tryParse(user!.id);
+
   // ============ التحميل والحفظ ============
   void load() {
     final l = prefs.getString('locale');
@@ -66,6 +69,82 @@ class AppState extends ChangeNotifier {
     favoriteIds = (prefs.getStringList('favorites') ?? []).toSet();
     notifications = prefs.getStringList('notifications') ?? [];
     notifyListeners();
+    syncFromSupabase();
+  }
+
+  Future<void> syncFromSupabase() async {
+    final uid = _dbUserId;
+    if (uid == null) return;
+    try {
+      final walletRow = await supabase
+          .from('wallets')
+          .select()
+          .eq('user_id', uid)
+          .maybeSingle();
+      if (walletRow != null) {
+        walletBalanceYer =
+            (walletRow['balance'] as num?)?.toDouble() ?? walletBalanceYer;
+        await prefs.setDouble('wallet', walletBalanceYer);
+
+        final wid = walletRow['wallet_id'];
+        final txRows = await supabase
+            .from('wallet_transactions')
+            .select()
+            .eq('wallet_id', wid)
+            .order('created_at', ascending: false);
+        txs = (txRows as List).map((r) {
+          final statusStr = r['status']?.toString() ?? 'completed';
+          return WalletTx(
+            id: 'TX-${r['tx_id']}',
+            reason: r['reason']?.toString() ?? '',
+            amountYer: (r['amount'] as num?)?.toDouble() ?? 0,
+            status: TxStatus.values.firstWhere(
+              (s) => s.name == statusStr,
+              orElse: () => TxStatus.completed,
+            ),
+            createdAt: r['created_at']?.toString().substring(0, 16) ?? _now(),
+          );
+        }).toList();
+        _saveTxs();
+      }
+
+      final bRows = await supabase
+          .from('bookings')
+          .select()
+          .eq('user_id', uid)
+          .order('created_at', ascending: false);
+      if ((bRows as List).isNotEmpty) {
+        bookings = bRows.map((r) {
+          final svc = r['service']?.toString() ?? 'hotel';
+          final pay = r['payment']?.toString() ?? 'cash';
+          final st = r['status']?.toString() ?? 'confirmed';
+          return Booking(
+            id: r['booking_id'].toString(),
+            service: ServiceType.values.firstWhere(
+              (s) => s.name == svc,
+              orElse: () => ServiceType.hotel,
+            ),
+            title: r['title']?.toString() ?? '',
+            provinceId: 'sanaa',
+            cityId: 'sanaa',
+            dateText: r['date_text']?.toString() ?? '',
+            totalYer: (r['total_yer'] as num?)?.toDouble() ?? 0,
+            payment: PaymentMethod.values.firstWhere(
+              (p) => p.name == pay,
+              orElse: () => PaymentMethod.cash,
+            ),
+            status: BookingStatus.values.firstWhere(
+              (s) => s.name == st,
+              orElse: () => BookingStatus.confirmed,
+            ),
+            createdAt: r['created_at']?.toString().substring(0, 16) ?? _now(),
+          );
+        }).toList();
+        await prefs.setString(
+            'bookings', jsonEncode(bookings.map((e) => e.toJson()).toList()));
+      }
+      notifyListeners();
+    } catch (_) {}
   }
 
   // ============ اللغة والثيم والعملة ============
@@ -98,6 +177,7 @@ class AppState extends ChangeNotifier {
     user = u;
     prefs.setString('user', jsonEncode(u.toJson()));
     notifyListeners();
+    syncFromSupabase();
   }
 
   // تعديل الملف الشخصي — يدعم الاسم والإيميل والرقم والصورة
@@ -120,9 +200,20 @@ class AppState extends ChangeNotifier {
       photoUrl: photoUrl ?? user!.photoUrl,
       role: user!.role,
       membership: user!.membership,
+      demo: user!.demo,
     );
     prefs.setString('user', jsonEncode(user!.toJson()));
     notifyListeners();
+
+    final uid = _dbUserId;
+    if (uid != null) {
+      supabase.from('users').update({
+        'first_name': user!.firstName,
+        'second_name': user!.secondName,
+        if (user!.phone != null) 'phone': user!.phone,
+        if (user!.email != null) 'email': user!.email,
+      }).eq('user_id', uid).then((_) {}).catchError((_) {});
+    }
   }
 
   void logout() {
@@ -155,6 +246,7 @@ class AppState extends ChangeNotifier {
     ));
     _saveTxs();
     notifyListeners();
+    _syncWalletToDb(yer, 'Wallet top-up', 'completed');
   }
 
   void _chargeWallet(double yer, String reason) {
@@ -165,6 +257,39 @@ class AppState extends ChangeNotifier {
       status: TxStatus.completed, createdAt: _now(),
     ));
     _saveTxs();
+    _syncWalletToDb(-yer, reason, 'completed');
+  }
+
+  Future<void> _syncWalletToDb(
+      double delta, String reason, String status) async {
+    final uid = _dbUserId;
+    if (uid == null) return;
+    try {
+      var walletRow = await supabase
+          .from('wallets')
+          .select()
+          .eq('user_id', uid)
+          .maybeSingle();
+      walletRow ??= await supabase
+          .from('wallets')
+          .insert({
+            'user_id': uid,
+            'balance': walletBalanceYer,
+            'currency': _currency,
+          })
+          .select()
+          .single();
+      final wid = walletRow['wallet_id'];
+      await supabase
+          .from('wallets')
+          .update({'balance': walletBalanceYer}).eq('wallet_id', wid);
+      await supabase.from('wallet_transactions').insert({
+        'wallet_id': wid,
+        'amount': delta,
+        'reason': reason,
+        'status': status,
+      });
+    } catch (_) {}
   }
 
   void _saveTxs() {
@@ -207,7 +332,32 @@ class AppState extends ChangeNotifier {
     notifications.insert(0, '✅ $title (${b.id})');
     prefs.setStringList('notifications', notifications);
     notifyListeners();
+    _insertBookingToDb(b);
     return b;
+  }
+
+  Future<void> _insertBookingToDb(Booking b) async {
+    final uid = _dbUserId;
+    if (uid == null) return;
+    try {
+      await supabase.from('bookings').insert({
+        'booking_id': b.id,
+        'user_id': uid,
+        'service': b.service.name,
+        'title': b.title,
+        'date_text': b.dateText,
+        'total_yer': b.totalYer,
+        'payment': b.payment.name,
+        'status': b.status.name,
+      });
+      await supabase.from('payments').insert({
+        'booking_id': b.id,
+        'method': b.payment.name,
+        'amount': b.totalYer,
+        'status': b.payment == PaymentMethod.wallet ? 'completed' : 'pending',
+        if (b.details['ref'] != null) 'ref_number': b.details['ref'].toString(),
+      });
+    } catch (_) {}
   }
 
   void cancelBooking(String id) {
@@ -224,6 +374,7 @@ class AppState extends ChangeNotifier {
         status: TxStatus.refunded, createdAt: _now(),
       ));
       _saveTxs();
+      _syncWalletToDb(b.totalYer, 'Refund: ${b.title}', 'refunded');
     }
     bookings[i] = Booking(
       id: b.id, service: b.service, title: b.title,
@@ -234,6 +385,15 @@ class AppState extends ChangeNotifier {
     );
     prefs.setString('bookings', jsonEncode(bookings.map((e) => e.toJson()).toList()));
     notifyListeners();
+
+    if (_dbUserId != null) {
+      supabase
+          .from('bookings')
+          .update({'status': 'cancelled'})
+          .eq('booking_id', b.id)
+          .then((_) {})
+          .catchError((_) {});
+    }
   }
 
   // ============ أدوات مساعدة ============

@@ -64,6 +64,7 @@ CREATE TABLE hotels (
   verified    BOOLEAN DEFAULT FALSE,
   lat         NUMERIC(9,6),
   lng         NUMERIC(9,6),
+  image_url   TEXT,
   created_at  TIMESTAMP DEFAULT NOW()
 );
 
@@ -125,7 +126,8 @@ CREATE TABLE vehicles (
   full_price  NUMERIC(12,2),
   seat_price  NUMERIC(12,2),
   with_driver BOOLEAN DEFAULT TRUE,
-  status      VARCHAR(20) DEFAULT 'available'
+  status      VARCHAR(20) DEFAULT 'available',
+  image_url   TEXT
 );
 
 -- ============ الرحلات السياحية ============
@@ -248,7 +250,8 @@ CREATE TABLE offers (
   title    VARCHAR(100),
   subtitle VARCHAR(200),
   discount INT,
-  active   BOOLEAN DEFAULT TRUE
+  active   BOOLEAN DEFAULT TRUE,
+  image_url TEXT
 );
 
 -- ============ العملات وأسعار الصرف ============

@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../supabase.dart';
 import '../theme/app_theme.dart';
 import 'auth_screens.dart';
+import 'admin_crud_screens.dart';
 import 'support_chat_screen.dart';
 
 /// Travixo — Admin/Developer Portal connected to Supabase
@@ -27,6 +28,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
   int _openTicketsCount = 0;
   List<Map<String, dynamic>> _tickets = [];
   List<Map<String, dynamic>> _bookings = [];
+  List<Map<String, dynamic>> _users = [];
 
   @override
   void initState() {
@@ -37,7 +39,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
   Future<void> _loadStats() async {
     setState(() => _loading = true);
     try {
-      final usersRes = await supabase.from('users').select('user_id');
+      final usersRes = await supabase.from('users').select().order('created_at', ascending: false);
       final bookingsRes = await supabase
           .from('bookings')
           .select()
@@ -64,7 +66,8 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
 
       if (!mounted) return;
       setState(() {
-        _usersCount = (usersRes as List).length;
+        _users = List<Map<String, dynamic>>.from(usersRes);
+        _usersCount = _users.length;
         _bookings = bookingsList;
         _bookingsCount = bookingsList.length;
         _totalRevenueYer = revenue;
@@ -137,6 +140,39 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     );
   }
 
+  void _openUsersSheet(bool ar) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      builder: (ctx) => DraggableScrollableSheet(
+        expand: false,
+        initialChildSize: 0.65,
+        builder: (_, ctrl) => ListView(
+          controller: ctrl,
+          padding: const EdgeInsets.all(16),
+          children: [
+            Text(ar ? 'المستخدمون المسجلون' : 'Registered Users',
+                style: const TextStyle(
+                    fontSize: 18, fontWeight: FontWeight.w900)),
+            const SizedBox(height: 12),
+            if (_users.isEmpty)
+              Center(
+                  child: Padding(
+                      padding: const EdgeInsets.all(24),
+                      child: Text(ar ? 'لا يوجد مستخدمون بعد' : 'No users yet')))
+            else
+              ..._users.map((u) => ListTile(
+                    leading: const Icon(Icons.person, color: TIColors.teal),
+                    title: Text('${u['first_name'] ?? ''} ${u['second_name'] ?? ''}'),
+                    subtitle: Text('${u['phone'] ?? u['email'] ?? '—'} • ${u['role'] ?? 'customer'}'),
+                    trailing: Text('#${u['user_id']}'),
+                  )),
+          ],
+        ),
+      ),
+    );
+  }
+
   void _openTicketsSheet(bool ar) {
     showModalBottomSheet(
       context: context,
@@ -202,16 +238,29 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     ];
 
     final sections = [
+      (Icons.people, bi('المستخدمون المسجلون', 'Registered Users'),
+          () => _openUsersSheet(ar)),
       (Icons.receipt_long, bi('إدارة الحجوزات', 'Bookings'),
           () => _openBookingsSheet(ar)),
       (Icons.support_agent, bi('تذاكر الدعم الفني', 'Support Tickets'),
           () => _openTicketsSheet(ar)),
-      (Icons.hotel, bi('إدارة الفنادق والغرف', 'Hotels & Rooms'), null),
-      (Icons.directions_car, bi('إدارة السيارات', 'Fleet Management'), null),
+      (Icons.hotel, bi('إدارة الفنادق والغرف', 'Hotels & Rooms'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminHotelsScreen()));
+        _loadStats();
+      }),
+      (Icons.directions_car, bi('إدارة السيارات', 'Fleet Management'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminVehiclesScreen()));
+        _loadStats();
+      }),
       (Icons.badge_outlined, bi('إدارة السائقين', 'Drivers'), null),
       (Icons.price_change, bi('إدارة الأسعار', 'Pricing'), null),
-      (Icons.local_offer_outlined, bi('العروض والمحتوى', 'Offers & Content'),
-          null),
+      (Icons.local_offer_outlined, bi('العروض والمحتوى', 'Offers & Content'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminOffersScreen()));
+        _loadStats();
+      }),
       (Icons.history, bi('سجل التدقيق', 'Audit Logs'), null),
     ];
 

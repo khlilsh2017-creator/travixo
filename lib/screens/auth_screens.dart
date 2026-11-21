@@ -141,40 +141,80 @@ class _PhoneLoginScreenState extends State<PhoneLoginScreen> {
   bool _otpSent = false;
   bool _emailMode = false;
 
-  void _sendOtp() {
+  Future<void> _sendOtp() async {
     final l = context.l;
-    if (_phone.text.trim().length < 9) {
+    final phone = _phone.text.trim();
+    if (phone.length < 9) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(l.t('errPhone'))));
       return;
     }
-    setState(() => _otpSent = true);
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-        content: Text('${l.t('otp')}: 1234 (Demo)')));
+    // دخول مباشر بدون تحقق (مع فحص إذا كان الرقم مسجلاً مسبقاً في Supabase)
+    try {
+      final existing = await supabase
+          .from('users')
+          .select()
+          .eq('phone', phone)
+          .maybeSingle();
+      if (existing != null && mounted) {
+        context.read<AppState>().login(AppUser(
+              id: existing['user_id'].toString(),
+              firstName: existing['first_name']?.toString() ?? '',
+              secondName: existing['second_name']?.toString() ?? '',
+              age: (existing['age'] as num?)?.toInt() ?? 20,
+              phone: existing['phone']?.toString(),
+              email: existing['email']?.toString(),
+              role: existing['role']?.toString() ?? 'customer',
+              demo: false,
+            ));
+        Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainShell()), (r) => false);
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
+    Navigator.of(context).pushReplacement(MaterialPageRoute(
+        builder: (_) => ProfileSetupScreen(phone: phone)));
   }
 
   void _verify() {
-    final l = context.l;
-    if (_otp.text.trim() != '1234') {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(l.t('errPhone'))));
-      return;
-    }
     Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ProfileSetupScreen(
-              phone: _phone.text.trim(),
-            )));
+        builder: (_) => ProfileSetupScreen(phone: _phone.text.trim())));
   }
 
-  void _emailLogin() {
+  Future<void> _emailLogin() async {
     final l = context.l;
-    if (!_email.text.contains('@') || _pass.text.length < 4) {
+    final email = _email.text.trim();
+    if (!email.contains('@') || _pass.text.length < 4) {
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(l.t('errEmail'))));
       return;
     }
+    try {
+      final existing = await supabase
+          .from('users')
+          .select()
+          .eq('email', email)
+          .maybeSingle();
+      if (existing != null && mounted) {
+        context.read<AppState>().login(AppUser(
+              id: existing['user_id'].toString(),
+              firstName: existing['first_name']?.toString() ?? '',
+              secondName: existing['second_name']?.toString() ?? '',
+              age: (existing['age'] as num?)?.toInt() ?? 20,
+              phone: existing['phone']?.toString(),
+              email: existing['email']?.toString(),
+              role: existing['role']?.toString() ?? 'customer',
+              demo: false,
+            ));
+        Navigator.of(context).pushAndRemoveUntil(
+            MaterialPageRoute(builder: (_) => const MainShell()), (r) => false);
+        return;
+      }
+    } catch (_) {}
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(MaterialPageRoute(
-        builder: (_) => ProfileSetupScreen(email: _email.text.trim())));
+        builder: (_) => ProfileSetupScreen(email: email)));
   }
 
   @override
@@ -480,20 +520,60 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
   final _second = TextEditingController();
   final _age = TextEditingController();
   String _currency = 'YER';
+  bool _saving = false;
 
-  void _save() {
+  Future<void> _save() async {
     if (!(_form.currentState?.validate() ?? false)) return;
+    setState(() => _saving = true);
+
+    final firstName = _first.text.trim();
+    final secondName = _second.text.trim();
+    final age = int.parse(_age.text.trim());
+    final role = widget.isDeveloper ? 'developer' : 'customer';
+    String userId = 'U${DateTime.now().millisecondsSinceEpoch}';
+    bool isDemo = true;
+
+    try {
+      final inserted = await supabase
+          .from('users')
+          .insert({
+            'first_name': firstName,
+            'second_name': secondName,
+            'age': age,
+            if (widget.phone != null && widget.phone!.isNotEmpty)
+              'phone': widget.phone,
+            if (widget.email != null && widget.email!.isNotEmpty)
+              'email': widget.email,
+            'role': role,
+            'membership': 'basic',
+          })
+          .select()
+          .single();
+      userId = inserted['user_id'].toString();
+      isDemo = false;
+
+      // إنشاء محفظة للمستخدم في قاعدة البيانات
+      await supabase.from('wallets').insert({
+        'user_id': inserted['user_id'],
+        'balance': 100000,
+        'currency': _currency,
+      });
+    } catch (_) {}
+
+    if (!mounted) return;
     final state = context.read<AppState>();
     state.setCurrency(_currency);
     state.login(AppUser(
-      id: 'U${DateTime.now().millisecondsSinceEpoch}',
-      firstName: _first.text.trim(),
-      secondName: _second.text.trim(),
-      age: int.parse(_age.text.trim()),
+      id: userId,
+      firstName: firstName,
+      secondName: secondName,
+      age: age,
       phone: widget.phone,
       email: widget.email,
-      role: widget.isDeveloper ? 'developer' : 'customer',
+      role: role,
+      demo: isDemo,
     ));
+
     if (widget.isDeveloper) {
       Navigator.of(context).pushAndRemoveUntil(
           MaterialPageRoute(builder: (_) => const DeveloperDashboard()),
@@ -580,7 +660,8 @@ class _ProfileSetupScreenState extends State<ProfileSetupScreen> {
           ),
           const SizedBox(height: 28),
           ElevatedButton(
-              onPressed: _save, child: Text(l.t('saveContinue'))),
+              onPressed: _saving ? null : _save,
+              child: _saving ? const SizedBox(height: 20, width: 20, child: CircularProgressIndicator(strokeWidth: 2)) : Text(l.t('saveContinue'))),
         ],
       ),
     );
