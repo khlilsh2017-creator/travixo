@@ -472,7 +472,7 @@ class HomeScreen extends StatelessWidget {
         LayoutBuilder(
           builder: (context, constraints) {
             final cols = constraints.maxWidth >= 820 ? 8 : 4;
-            final spacing = 10.0;
+            const spacing = 10.0;
             final itemWidth =
                 (constraints.maxWidth - (cols - 1) * spacing) / cols;
             return Wrap(
@@ -678,7 +678,7 @@ class HomeScreen extends StatelessWidget {
             final cols = constraints.maxWidth >= 820
                 ? 3
                 : (constraints.maxWidth >= 560 ? 2 : 1);
-            final spacing = 14.0;
+            const spacing = 14.0;
             final cardW =
                 (constraints.maxWidth - (cols - 1) * spacing) / cols;
             return Wrap(
@@ -869,7 +869,7 @@ class HomeScreen extends StatelessWidget {
             final cols = constraints.maxWidth >= 820
                 ? 4
                 : (constraints.maxWidth >= 520 ? 2 : 1);
-            final spacing = 12.0;
+            const spacing = 12.0;
             final cardW =
                 (constraints.maxWidth - (cols - 1) * spacing) / cols;
             return Wrap(

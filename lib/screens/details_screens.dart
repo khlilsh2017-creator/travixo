@@ -928,14 +928,38 @@ class _TourDetailsState extends State<_TourDetails> {
               '${l.province(tour.provinceId)} • ${tour.days} ${l.t('days')} • ${tour.seatsLeft} ${l.t('available')}',
               style: TextStyle(color: Theme.of(context).hintColor),
             ),
-            const SizedBox(height: 14),
-            Text(tour.description, style: const TextStyle(height: 1.5)),
+            if (tour.includes.isNotEmpty) ...[
+              const SizedBox(height: 14),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: tour.includes
+                    .map((inc) => Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: isDark
+                                ? const Color(0xFF1E293B)
+                                : TIColors.orangeTint,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                                color: isDark
+                                    ? TIColors.darkLine
+                                    : TIColors.orangeSoft),
+                          ),
+                          child: Text('✓ $inc',
+                              style: const TextStyle(
+                                  fontSize: 12, fontWeight: FontWeight.w600)),
+                        ))
+                    .toList(),
+              ),
+            ],
             const SizedBox(height: 18),
-            Text((l.isArabic ? 'برنامج الرحلة' : 'Itinerary'),
+            Text(l.isArabic ? 'برنامج الرحلة' : 'Itinerary',
                 style:
                     const TextStyle(fontSize: 16, fontWeight: FontWeight.w800)),
             const SizedBox(height: 8),
-            for (var i = 0; i < tour.itinerary.length; i++)
+            for (var i = 0; i < tour.plan.length; i++)
               Container(
                 margin: const EdgeInsets.only(bottom: 8),
                 padding: const EdgeInsets.all(12),
@@ -946,19 +970,39 @@ class _TourDetailsState extends State<_TourDetails> {
                       color:
                           isDark ? TIColors.darkLine : const Color(0xFFE2E8F0)),
                 ),
-                child: Row(children: [
-                  CircleAvatar(
-                    radius: 14,
-                    backgroundColor: TIColors.orangeDeep,
-                    child: Text('${i + 1}',
-                        style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 12,
-                            fontWeight: FontWeight.w800)),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Text(tour.itinerary[i])),
-                ]),
+                child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      CircleAvatar(
+                        radius: 14,
+                        backgroundColor: TIColors.orangeDeep,
+                        child: Text('${i + 1}',
+                            style: const TextStyle(
+                                color: Colors.white,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w800)),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '${tour.plan[i].day} — ${tour.plan[i].title}',
+                              style: const TextStyle(
+                                  fontWeight: FontWeight.w800, fontSize: 13.5),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              tour.plan[i].details,
+                              style: TextStyle(
+                                  fontSize: 12.5,
+                                  color: Theme.of(context).hintColor),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ]),
               ),
             const SizedBox(height: 18),
             Container(
