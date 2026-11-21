@@ -29,7 +29,9 @@ jobs:
           flutter-version: 3.22.0
 
       - name: Generate project files
-        run: flutter create . --platforms android,web --org com.travixo --project-name travel_in_app
+        run: |
+          flutter create . --platforms android,web --org com.travixo --project-name travel_in_app
+          rm -f test/widget_test.dart
 
       - name: Install dependencies
         run: flutter pub get
