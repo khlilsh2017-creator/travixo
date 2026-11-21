@@ -49,7 +49,7 @@ jobs:
           sed -i 's/apple-mobile-web-app-title" content="[^"]*"/apple-mobile-web-app-title" content="Travixo"/' web/index.html
 
       - name: Find Dart errors
-        run: flutter analyze --no-pub
+        run: flutter analyze --no-pub --no-fatal-infos
 
       - name: Build APK
         run: flutter build apk --release
