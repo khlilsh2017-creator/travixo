@@ -131,8 +131,29 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
                     leading: const Icon(Icons.receipt_long, color: TIColors.teal),
                     title: Text(b['title']?.toString() ?? b['booking_id'].toString()),
                     subtitle: Text('${b['status']} • ${b['date_text'] ?? ''}'),
-                    trailing: Text('${b['total_yer'] ?? 0} YER',
-                        style: const TextStyle(fontWeight: FontWeight.w800)),
+                    trailing: PopupMenuButton<String>(
+                      onSelected: (newStatus) async {
+                        await supabase
+                            .from('bookings')
+                            .update({'status': newStatus})
+                            .eq('booking_id', b['booking_id']);
+                        await logAdminAction(
+                          'Booking ${b['booking_id']} status',
+                          oldVal: b['status']?.toString(),
+                          newVal: newStatus,
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        _loadStats();
+                      },
+                      itemBuilder: (_) => const [
+                        PopupMenuItem(value: 'confirmed', child: Text('تأكيد (confirmed)')),
+                        PopupMenuItem(value: 'completed', child: Text('مكتمل (completed)')),
+                        PopupMenuItem(value: 'cancelled', child: Text('إلغاء (cancelled)')),
+                      ],
+                      child: Chip(
+                        label: Text('${b['total_yer'] ?? 0} YER'),
+                      ),
+                    ),
                   )),
           ],
         ),
@@ -254,14 +275,25 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
             MaterialPageRoute(builder: (_) => const AdminVehiclesScreen()));
         _loadStats();
       }),
-      (Icons.badge_outlined, bi('إدارة السائقين', 'Drivers'), null),
-      (Icons.price_change, bi('إدارة الأسعار', 'Pricing'), null),
+      (Icons.badge_outlined, bi('إدارة السائقين', 'Drivers'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminDriversScreen()));
+        _loadStats();
+      }),
+      (Icons.price_change, bi('إدارة الأسعار', 'Pricing'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminPricingScreen()));
+        _loadStats();
+      }),
       (Icons.local_offer_outlined, bi('العروض والمحتوى', 'Offers & Content'), () async {
         await Navigator.push(context,
             MaterialPageRoute(builder: (_) => const AdminOffersScreen()));
         _loadStats();
       }),
-      (Icons.history, bi('سجل التدقيق', 'Audit Logs'), null),
+      (Icons.history, bi('سجل التدقيق', 'Audit Logs'), () async {
+        await Navigator.push(context,
+            MaterialPageRoute(builder: (_) => const AdminAuditLogsScreen()));
+      }),
     ];
 
     return Scaffold(
