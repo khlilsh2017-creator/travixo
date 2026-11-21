@@ -2,10 +2,8 @@
 // يرد على أي سؤال: تحيات، أسئلة عامة، وأسئلة التطبيق
 import 'package:flutter/material.dart';
 import '../theme/app_theme.dart';
-import '../state/app_state.dart';
 import '../l10n/app_localizations.dart';
 import '../screens/haptic.dart';
-import 'package:provider/provider.dart';
 
 class AssistantScreen extends StatefulWidget {
   const AssistantScreen({Key? key}) : super(key: key);

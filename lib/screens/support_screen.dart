@@ -155,8 +155,7 @@ class _SupportScreenState extends State<SupportScreen> {
                     child: Column(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Text('تعذر تحميل المحادثات
-$_error',
+                        Text('تعذر تحميل المحادثات\n$_error',
                             textAlign: TextAlign.center),
                         const SizedBox(height: 12),
                         FilledButton.icon(

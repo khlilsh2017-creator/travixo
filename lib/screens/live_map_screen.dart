@@ -5,13 +5,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import '../theme/app_theme.dart';
-import '../state/app_state.dart';
 import '../l10n/app_localizations.dart';
 import '../data/models.dart';
 import '../data/demo_data.dart';
 import '../data/real_hotels_data.dart';
 import 'haptic.dart';
-import 'package:provider/provider.dart';
 
 class LiveMapScreen extends StatefulWidget {
   const LiveMapScreen({Key? key}) : super(key: key);
