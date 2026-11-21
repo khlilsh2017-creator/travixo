@@ -259,6 +259,20 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     ];
 
     final sections = [
+      (Icons.cloud_upload, bi('مزامنة البيانات المحلية لقاعدة البيانات', 'Seed Local Data to Supabase'), () async {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(bi('جارٍ رفع البيانات المحلية إلى Supabase...', 'Syncing local catalog to Supabase...'))),
+        );
+        try {
+          final msg = await state.seedLocalCatalogToSupabase();
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
+          _loadStats();
+        } catch (e) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text('خطأ: $e')));
+        }
+      }),
       (Icons.people, bi('المستخدمون المسجلون', 'Registered Users'),
           () => _openUsersSheet(ar)),
       (Icons.receipt_long, bi('إدارة الحجوزات', 'Bookings'),

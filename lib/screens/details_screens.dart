@@ -65,7 +65,7 @@ class _CategoryListScreen extends StatelessWidget {
     } else if (service == ServiceType.localRide) {
       title = l.t('localRide');
       tiles = [
-        for (final c in kCars.where((c) => c.withDriver))
+        for (final c in getAllCars().where((c) => c.withDriver))
           _Tile(
             icon: Icons.directions_car,
             imageUrl: c.img(),
@@ -80,7 +80,7 @@ class _CategoryListScreen extends StatelessWidget {
     } else if (service == ServiceType.rentCar) {
       title = l.t('rentCar');
       tiles = [
-        for (final c in kCars.where((c) => !c.withDriver))
+        for (final c in getAllCars().where((c) => !c.withDriver))
           _Tile(
             icon: Icons.car_rental,
             imageUrl: c.img(),
@@ -205,7 +205,7 @@ class _HotelDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l;
     final state = context.watch<AppState>();
-    final hotel = getAllHotels().firstWhere((h) => h.id == hotelId);
+    final hotel = getAllHotels().firstWhere((h) => h.id == hotelId, orElse: () => getAllHotels().first);
 
     return Scaffold(
       body: CustomScrollView(slivers: [
@@ -547,7 +547,7 @@ class _CarDetails extends StatelessWidget {
   Widget build(BuildContext context) {
     final l = context.l;
     final state = context.watch<AppState>();
-    final car = kCars.firstWhere((c) => c.id == carId);
+    final car = getAllCars().firstWhere((c) => c.id == carId, orElse: () => getAllCars().first);
 
     return Scaffold(
       appBar: AppBar(title: Text(withDriver ? l.t('localRide') : l.t('rentCar'))),
@@ -788,7 +788,7 @@ class _AirportDetails extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l = context.l;
-    final vipCar = kCars.firstWhere((c) => c.id == 'c5');
+    final vipCar = getAllCars().firstWhere((c) => c.id == 'c5', orElse: () => getAllCars().first);
 
     return Scaffold(
       appBar: AppBar(title: Text(l.t('airport'))),

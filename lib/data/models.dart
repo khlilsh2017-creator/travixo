@@ -165,9 +165,12 @@ class Hotel {
   final List<HotelRoom> rooms;
   final bool verified; // موثّق = بيانات حقيقية، غير موثّق = Demo
   final double lat, lng;
+  final String? imageUrl;
 
-  /// صورة الفندق — حقيقية للفندق نفسه إن وُجدت، وإلا صورة المحافظة
-  String img() => kHotelImgs[id] ?? hotelImg(provinceId, id.hashCode.abs());
+  /// صورة الفندق — من قاعدة البيانات إن وُجدت، وإلا المحلية
+  String img() => (imageUrl != null && imageUrl!.isNotEmpty)
+      ? imageUrl!
+      : (kHotelImgs[id] ?? hotelImg(provinceId, id.hashCode.abs()));
 
   const Hotel({
     required this.id,
@@ -182,6 +185,7 @@ class Hotel {
     this.verified = false,
     this.lat = 0,
     this.lng = 0,
+    this.imageUrl,
   });
 
   Availability get availability => rooms.any((r) => r.available)
@@ -217,8 +221,11 @@ class Car {
   final Availability status;
   final String? driverName;
   final double driverRating;
+  final String? imageUrl;
 
-  String img() => carImg(id);
+  String img() => (imageUrl != null && imageUrl!.isNotEmpty)
+      ? imageUrl!
+      : carImg(id);
 
   const Car({
     required this.id,
@@ -233,6 +240,7 @@ class Car {
     this.status = Availability.available,
     this.driverName,
     this.driverRating = 4.8,
+    this.imageUrl,
   });
 }
 
@@ -267,6 +275,7 @@ class Offer {
   final ServiceType service;
   final String targetId;
   final int discountPercent;
+  final String? imageUrl;
 
   const Offer({
     required this.id,
@@ -275,6 +284,7 @@ class Offer {
     required this.service,
     required this.targetId,
     required this.discountPercent,
+    this.imageUrl,
   });
 }
 

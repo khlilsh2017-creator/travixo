@@ -3,6 +3,8 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../data/models.dart';
+import '../data/demo_data.dart';
+import '../data/real_hotels_data.dart';
 import '../l10n/app_localizations.dart';
 import '../supabase.dart';
 
@@ -35,6 +37,9 @@ class AppState extends ChangeNotifier {
   double walletBalanceYer = 100000; // رصيد تجريبي ترحيبي (Demo)
   Set<String> favoriteIds = {};
   List<String> notifications = [];
+  List<Hotel> liveHotels = [];
+  List<Car> liveCars = [];
+  List<Offer> liveOffers = [];
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -70,6 +75,7 @@ class AppState extends ChangeNotifier {
     notifications = prefs.getStringList('notifications') ?? [];
     notifyListeners();
     syncFromSupabase();
+    fetchLiveCatalog();
   }
 
   Future<void> syncFromSupabase() async {
@@ -147,6 +153,193 @@ class AppState extends ChangeNotifier {
     } catch (_) {}
   }
 
+
+  Future<void> fetchLiveCatalog() async {
+    try {
+      final provRows = await supabase.from('provinces').select();
+      final Map<int, String> provById = {};
+      for (final p in (provRows as List)) {
+        final pid = p['province_id'] as int?;
+        final en = p['name_en']?.toString().toLowerCase() ?? 'sanaa';
+        if (pid != null) provById[pid] = en;
+      }
+
+      final hotelRows =
+          await supabase.from('hotels').select().order('hotel_id');
+      final roomRows =
+          await supabase.from('hotel_rooms').select().order('room_id');
+      final drvRows = await supabase.from('drivers').select();
+      final Map<int, Map<String, dynamic>> drvById = {};
+      for (final d in (drvRows as List)) {
+        final did = d['driver_id'] as int?;
+        if (did != null) drvById[did] = Map<String, dynamic>.from(d);
+      }
+
+      if ((hotelRows as List).isNotEmpty) {
+        liveHotels = hotelRows.map((h) {
+          final hid = h['hotel_id'] as int;
+          final rooms = (roomRows as List)
+              .where((r) => r['hotel_id'] == hid)
+              .map((r) => HotelRoom(
+                    id: 'r_${r['room_id']}',
+                    name: r['name']?.toString() ?? 'Room',
+                    typeId: 'standard',
+                    bedType: r['bed_type']?.toString() ?? 'King',
+                    pricePerNightYer:
+                        (r['price_night'] as num?)?.toDouble() ?? 30000,
+                    capacity: (r['capacity'] as num?)?.toInt() ?? 2,
+                    amenities: const ['Wi-Fi', 'AC'],
+                    available: r['available'] != false,
+                  ))
+              .toList();
+          final pid = provById[h['province_id']] ?? 'sanaa';
+          return Hotel(
+            id: '$hid',
+            name: h['name_ar']?.toString() ?? '',
+            provinceId: pid,
+            cityId: pid,
+            rating: (h['rating'] as num?)?.toDouble() ?? 4.5,
+            reviewsCount: 25,
+            description: h['name_ar']?.toString() ?? '',
+            amenities: const ['Wi-Fi', 'Parking'],
+            rooms: rooms,
+            verified: h['verified'] == true,
+            lat: (h['lat'] as num?)?.toDouble() ?? 15.36,
+            lng: (h['lng'] as num?)?.toDouble() ?? 44.19,
+            imageUrl: h['image_url']?.toString(),
+          );
+        }).toList();
+      }
+
+      final carRows =
+          await supabase.from('vehicles').select().order('vehicle_id');
+      if ((carRows as List).isNotEmpty) {
+        liveCars = carRows.map((v) {
+          final st = v['status']?.toString() ?? 'available';
+          final drv = drvById[v['driver_id']];
+          return Car(
+            id: '${v['vehicle_id']}',
+            name: v['name']?.toString() ?? '',
+            categoryId: 'sedan',
+            year: (v['year'] as num?)?.toInt() ?? 2024,
+            seats: (v['seats'] as num?)?.toInt() ?? 4,
+            pricePerDayYer: (v['full_price'] as num?)?.toDouble() ?? 25000,
+            withDriver: v['with_driver'] != false,
+            status: Availability.values.firstWhere(
+              (a) => a.name == st,
+              orElse: () => Availability.available,
+            ),
+            driverName: drv?['full_name']?.toString(),
+            driverRating: (drv?['rating'] as num?)?.toDouble() ?? 4.8,
+            imageUrl: v['image_url']?.toString(),
+          );
+        }).toList();
+      }
+
+      final offerRows = await supabase
+          .from('offers')
+          .select()
+          .eq('active', true)
+          .order('offer_id');
+      if ((offerRows as List).isNotEmpty) {
+        liveOffers = offerRows
+            .map((o) => Offer(
+                  id: '${o['offer_id']}',
+                  title: o['title']?.toString() ?? '',
+                  subtitle: o['subtitle']?.toString() ?? '',
+                  service: ServiceType.hotel,
+                  targetId: liveHotels.isNotEmpty ? liveHotels.first.id : 'h1',
+                  discountPercent: (o['discount'] as num?)?.toInt() ?? 10,
+                  imageUrl: o['image_url']?.toString(),
+                ))
+            .toList();
+      }
+      notifyListeners();
+    } catch (_) {}
+  }
+
+  Future<String> seedLocalCatalogToSupabase() async {
+    int addedHotels = 0, addedCars = 0, addedOffers = 0;
+    final provRows = await supabase.from('provinces').select();
+    final Map<String, int> provIdByKey = {};
+    for (final p in (provRows as List)) {
+      final en = p['name_en']?.toString().toLowerCase();
+      if (en != null && p['province_id'] is int) {
+        provIdByKey[en] = p['province_id'] as int;
+      }
+    }
+
+    final existingHotels = await supabase.from('hotels').select('name_ar');
+    final existingHotelNames =
+        (existingHotels as List).map((e) => e['name_ar'].toString()).toSet();
+
+    for (final h in [...kRealHotels, ...kHotels]) {
+      if (existingHotelNames.contains(h.name)) continue;
+      final inserted = await supabase
+          .from('hotels')
+          .insert({
+            'name_ar': h.name,
+            'province_id': provIdByKey[h.provinceId],
+            'rating': h.rating,
+            'verified': h.verified,
+            'lat': h.lat,
+            'lng': h.lng,
+            'image_url': h.img(),
+          })
+          .select()
+          .single();
+      final hid = inserted['hotel_id'];
+      for (final r in h.rooms) {
+        await supabase.from('hotel_rooms').insert({
+          'hotel_id': hid,
+          'name': r.name,
+          'bed_type': r.bedType,
+          'price_night': r.pricePerNightYer,
+          'capacity': r.capacity,
+          'available': r.available,
+        });
+      }
+      addedHotels++;
+    }
+
+    final existingCars = await supabase.from('vehicles').select('name');
+    final existingCarNames =
+        (existingCars as List).map((e) => e['name'].toString()).toSet();
+
+    for (final c in kCars) {
+      if (existingCarNames.contains(c.name)) continue;
+      await supabase.from('vehicles').insert({
+        'name': c.name,
+        'year': c.year,
+        'seats': c.seats,
+        'full_price': c.pricePerDayYer,
+        'seat_price': (c.pricePerDayYer / c.seats).roundToDouble(),
+        'with_driver': c.withDriver,
+        'status': c.status.name,
+        'image_url': c.img(),
+      });
+      addedCars++;
+    }
+
+    final existingOffers = await supabase.from('offers').select('title');
+    final existingOfferTitles =
+        (existingOffers as List).map((e) => e['title'].toString()).toSet();
+
+    for (final o in kOffers) {
+      if (existingOfferTitles.contains(o.title)) continue;
+      await supabase.from('offers').insert({
+        'title': o.title,
+        'subtitle': o.subtitle,
+        'discount': o.discountPercent,
+        'active': true,
+      });
+      addedOffers++;
+    }
+
+    await fetchLiveCatalog();
+    return 'تمت المزامنة: $addedHotels فنادق، $addedCars سيارات، $addedOffers عروض';
+  }
+
   // ============ اللغة والثيم والعملة ============
   void setLocale(Locale loc) {
     _locale = loc;
@@ -178,6 +371,7 @@ class AppState extends ChangeNotifier {
     prefs.setString('user', jsonEncode(u.toJson()));
     notifyListeners();
     syncFromSupabase();
+    fetchLiveCatalog();
   }
 
   // تعديل الملف الشخصي — يدعم الاسم والإيميل والرقم والصورة

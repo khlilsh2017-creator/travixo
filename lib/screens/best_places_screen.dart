@@ -361,7 +361,7 @@ class _BestPlacesScreenState extends State<BestPlacesScreen> {
                         style: const TextStyle(fontSize: 11)),
                   ]),
                   trailing: Text(
-                      l.money(h.rooms.first.pricePerNightYer),
+                      h.rooms.isNotEmpty ? l.money(h.rooms.first.pricePerNightYer) : '—',
                       style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w800,

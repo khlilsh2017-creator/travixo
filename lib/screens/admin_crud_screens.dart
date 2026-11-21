@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../state/app_state.dart';
 import '../supabase.dart';
 import '../theme/app_theme.dart';
 
@@ -97,6 +98,7 @@ class _AdminVehiclesScreenState extends State<AdminVehiclesScreen> {
   Future<void> _delete(int id, String name) async {
     try {
       await supabase.from('vehicles').delete().eq('vehicle_id', id);
+      await AppState.instance?.fetchLiveCatalog();
       await logAdminAction('Delete vehicle #$id', oldVal: name);
       _load();
     } catch (e) {
@@ -323,14 +325,16 @@ class _AdminVehiclesScreenState extends State<AdminVehiclesScreen> {
                         try {
                           if (item == null) {
                             await supabase.from('vehicles').insert(data);
-                            await logAdminAction('Add vehicle',
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Add vehicle',
                                 newVal: name.text.trim());
                           } else {
                             await supabase
                                 .from('vehicles')
                                 .update(data)
                                 .eq('vehicle_id', item['vehicle_id']);
-                            await logAdminAction(
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction(
                                 'Update vehicle #${item['vehicle_id']}',
                                 newVal: name.text.trim());
                           }
@@ -464,6 +468,7 @@ class _AdminHotelsScreenState extends State<AdminHotelsScreen> {
     try {
       await supabase.from('hotel_rooms').delete().eq('hotel_id', id);
       await supabase.from('hotels').delete().eq('hotel_id', id);
+      await AppState.instance?.fetchLiveCatalog();
       await logAdminAction('Delete hotel #$id', oldVal: name);
       _load();
     } catch (e) {
@@ -617,14 +622,16 @@ class _AdminHotelsScreenState extends State<AdminHotelsScreen> {
                         try {
                           if (item == null) {
                             await supabase.from('hotels').insert(data);
-                            await logAdminAction('Add hotel',
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Add hotel',
                                 newVal: name.text.trim());
                           } else {
                             await supabase
                                 .from('hotels')
                                 .update(data)
                                 .eq('hotel_id', item['hotel_id']);
-                            await logAdminAction(
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction(
                                 'Update hotel #${item['hotel_id']}',
                                 newVal: name.text.trim());
                           }
@@ -858,14 +865,16 @@ class _AdminHotelRoomsScreenState extends State<AdminHotelRoomsScreen> {
                       try {
                         if (item == null) {
                           await supabase.from('hotel_rooms').insert(data);
-                          await logAdminAction('Add room',
+                          await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Add room',
                               newVal: '${widget.hotelName}: ${name.text.trim()}');
                         } else {
                           await supabase
                               .from('hotel_rooms')
                               .update(data)
                               .eq('room_id', item['room_id']);
-                          await logAdminAction('Update room #${item['room_id']}',
+                          await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Update room #${item['room_id']}',
                               newVal: name.text.trim());
                         }
                         if (ctx.mounted) Navigator.pop(ctx, true);
@@ -1039,14 +1048,16 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                     try {
                       if (item == null) {
                         await supabase.from('drivers').insert(data);
-                        await logAdminAction('Add driver',
+                        await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Add driver',
                             newVal: name.text.trim());
                       } else {
                         await supabase
                             .from('drivers')
                             .update(data)
                             .eq('driver_id', item['driver_id']);
-                        await logAdminAction(
+                        await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction(
                             'Update driver #${item['driver_id']}',
                             newVal: name.text.trim());
                       }
@@ -1113,7 +1124,8 @@ class _AdminDriversScreenState extends State<AdminDriversScreen> {
                                     .from('drivers')
                                     .delete()
                                     .eq('driver_id', d['driver_id']);
-                                await logAdminAction(
+                                await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction(
                                     'Delete driver #${d['driver_id']}',
                                     oldVal: d['full_name']?.toString());
                                 _load();
@@ -1170,6 +1182,7 @@ class _AdminOffersScreenState extends State<AdminOffersScreen> {
   Future<void> _delete(int id, String title) async {
     try {
       await supabase.from('offers').delete().eq('offer_id', id);
+      await AppState.instance?.fetchLiveCatalog();
       await logAdminAction('Delete offer #$id', oldVal: title);
       _load();
     } catch (e) {
@@ -1282,14 +1295,16 @@ class _AdminOffersScreenState extends State<AdminOffersScreen> {
                         try {
                           if (item == null) {
                             await supabase.from('offers').insert(data);
-                            await logAdminAction('Add offer',
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction('Add offer',
                                 newVal: title.text.trim());
                           } else {
                             await supabase
                                 .from('offers')
                                 .update(data)
                                 .eq('offer_id', item['offer_id']);
-                            await logAdminAction(
+                            await AppState.instance?.fetchLiveCatalog();
+      await logAdminAction(
                                 'Update offer #${item['offer_id']}',
                                 newVal: title.text.trim());
                           }
@@ -1443,6 +1458,7 @@ class _AdminPricingScreenState extends State<AdminPricingScreen> {
           .from('exchange_rates')
           .update({'rate': val, 'updated_at': DateTime.now().toIso8601String()})
           .eq('rate_id', r['rate_id']);
+      await AppState.instance?.fetchLiveCatalog();
       await logAdminAction(
         'Update rate ${r['from_cur']}->${r['to_cur']}',
         oldVal: r['rate']?.toString(),

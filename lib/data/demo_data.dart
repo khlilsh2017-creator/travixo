@@ -1,5 +1,6 @@
 import 'dart:math';
 import 'models.dart';
+import '../state/app_state.dart';
 
 /// ============================================================
 /// TRAVEL IN — DEMO DATA (بيئة تطوير فقط)
@@ -220,3 +221,14 @@ double distanceKm(String a, String b) {
 
 /// تقدير مدة الرحلة: متوسط سرعة 65 كم/س + معامل طرق 1.25
 int travelMinutes(double km) => ((km * 1.25) / 65 * 60).round();
+
+
+List<Car> getAllCars() =>
+    (AppState.instance != null && AppState.instance!.liveCars.isNotEmpty)
+        ? AppState.instance!.liveCars
+        : kCars;
+
+List<Offer> getAllOffers() =>
+    (AppState.instance != null && AppState.instance!.liveOffers.isNotEmpty)
+        ? AppState.instance!.liveOffers
+        : kOffers;

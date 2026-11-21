@@ -115,7 +115,7 @@ class _TripPlannerScreenState extends State<TripPlannerScreen> {
     }
 
     // --- السيارة حسب الميزانية ---
-    final cars = kCars.where((c) => c.withDriver).toList()
+    final cars = getAllCars().where((c) => c.withDriver).toList()
       ..sort((a, b) => a.pricePerDayYer.compareTo(b.pricePerDayYer));
     Car? car = switch (_budget) {
       'eco' => cars.first,

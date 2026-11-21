@@ -1,4 +1,5 @@
 import 'models.dart';
+import '../state/app_state.dart';
 import 'demo_data.dart';
 
 /// ============================================================
@@ -193,4 +194,6 @@ final List<Hotel> kRealHotels = [
 ];
 
 /// دمج: الفنادق الحقيقية أولاً ثم القديمة التجريبية
-List<Hotel> getAllHotels() => [...kRealHotels, ...kHotels];
+List<Hotel> getAllHotels() => (AppState.instance != null && AppState.instance!.liveHotels.isNotEmpty)
+    ? AppState.instance!.liveHotels
+    : [...kRealHotels, ...kHotels];

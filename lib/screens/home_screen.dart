@@ -493,9 +493,9 @@ class _HomeScreenState extends State<HomeScreen> with TickerProviderStateMixin {
             height: 150,
             child: ListView.builder(
               scrollDirection: Axis.horizontal,
-              itemCount: kOffers.length,
+              itemCount: getAllOffers().length,
               itemBuilder: (ctx, i) {
-                final offer = kOffers[i];
+                final offer = getAllOffers()[i];
                 return _Pressable(
                   onTap: () {
                     Haptics.light();

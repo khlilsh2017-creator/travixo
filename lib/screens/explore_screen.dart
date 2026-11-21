@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../data/demo_data.dart';
+import '../data/real_hotels_data.dart';
 import '../data/models.dart';
 import '../l10n/app_localizations.dart';
 import '../theme/app_theme.dart';
@@ -27,7 +28,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
     // ===== بناء النتائج حسب الفلاتر =====
     final results = <_ResultItem>[];
 
-    for (final h in kHotels) {
+    for (final h in getAllHotels()) {
       if (_type != null && _type != ServiceType.hotel) continue;
       if (_province != null && h.provinceId != _province) continue;
       if (_query.isNotEmpty &&
@@ -48,7 +49,7 @@ class _ExploreScreenState extends State<ExploreScreen> {
       ));
     }
 
-    for (final c in kCars) {
+    for (final c in getAllCars()) {
       if (_type != null && _type != (c.withDriver ? ServiceType.localRide : ServiceType.rentCar)) {
         continue;
       }
