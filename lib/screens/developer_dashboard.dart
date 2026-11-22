@@ -817,45 +817,6 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     }
   }
 
-  Future<void> _toggleUserRole(Map<String, dynamic> u, bool ar) async {
-    final uid = u['user_id'];
-    if (uid == null) return;
-    final currentRole = (u['role'] ?? 'customer').toString();
-    final isDev = currentRole == 'developer';
-    final nextRole = isDev ? 'customer' : 'developer';
-    try {
-      await supabase
-          .from('users')
-          .update({'role': nextRole})
-          .eq('user_id', uid);
-      await logAdminAction(
-        'Change role user #$uid',
-        oldVal: currentRole,
-        newVal: nextRole,
-      );
-      await _loadStats();
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            nextRole == 'developer'
-                ? (ar
-                    ? 'تمت ترقية المستخدم إلى مطور ✅'
-                    : 'User promoted to Developer')
-                : (ar
-                    ? 'تم تحويل الحساب إلى عميل'
-                    : 'Account changed to Customer'),
-          ),
-        ),
-      );
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('Error: $e')));
-      }
-    }
-  }
-
   Future<void> _toggleTicketStatus(Map<String, dynamic> t, bool ar) async {
     final current = (t['status'] ?? 'open').toString();
     final next = current == 'open' ? 'closed' : 'open';
@@ -863,7 +824,7 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
       await supabase
           .from('support_tickets')
           .update({'status': next})
-          .eq('ticket_id', t['ticket_id']);
+          .eq('id', t['id'] ?? t['ticket_id']);
       await logAdminAction(
         'Ticket #${t['ticket_id']} status',
         oldVal: current,
@@ -2312,30 +2273,6 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
                               style: const TextStyle(fontSize: 11.5),
                             ),
                           ),
-                        OutlinedButton.icon(
-                          onPressed: () => _toggleUserRole(u, ar),
-                          style: OutlinedButton.styleFrom(
-                            minimumSize: const Size(0, 34),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
-                            foregroundColor:
-                                isDev ? TIColors.danger : TIColors.gold,
-                            side: BorderSide(
-                              color: isDev ? TIColors.danger : TIColors.gold,
-                            ),
-                          ),
-                          icon: Icon(
-                            isDev
-                                ? Icons.person_remove_outlined
-                                : Icons.admin_panel_settings_outlined,
-                            size: 15,
-                          ),
-                          label: Text(
-                            isDev
-                                ? (ar ? 'إلغاء صلاحية المطور' : 'Remove Admin')
-                                : (ar ? 'ترقية لمطور' : 'Make Developer'),
-                            style: const TextStyle(fontSize: 11.5),
-                          ),
-                        ),
                       ],
                     ),
                   ],
