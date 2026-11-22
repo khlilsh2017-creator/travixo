@@ -42,6 +42,7 @@ jobs:
       - name: Brand as Travixo (Android + Web)
         run: |
           sed -i 's/android:label=".*"/android:label="Travixo"/' android/app/src/main/AndroidManifest.xml
+          grep -q 'android.permission.INTERNET' android/app/src/main/AndroidManifest.xml || sed -i 's|<application|<uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE"/>\n    <application|' android/app/src/main/AndroidManifest.xml
           sed -i 's|<title>.*</title>|<title>Travixo</title>|' web/index.html
           sed -i 's/"name": ".*"/"name": "Travixo"/' web/manifest.json
           sed -i 's/"short_name": ".*"/"short_name": "Travixo"/' web/manifest.json
