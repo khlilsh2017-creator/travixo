@@ -1,5 +1,5 @@
-// شاشة البداية السينمائية — Travixo Assembling Logo Splash Screen
-// يتجمّع الشعار من 4 أجزاء + حلقة مضيئة + بريق ضوئي + تجميع حروف TRAVIXO
+// شاشة البداية السينمائية — Travixo Assembling Logo Splash Screen (ظهور فوري وحركة سريعة)
+// تظهر القطع الأربع الدائرية للشعار فوراً من أول لحظة وتتجمّع في المنتصف مع حلقة مضيئة وحروف TRAVIXO
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
@@ -23,6 +23,7 @@ class _SplashScreenState extends State<SplashScreen>
   late final Animation<double> _ringSweep;
   late final Animation<double> _shimmer;
   late final Animation<double> _tagline;
+  bool _precached = false;
 
   static const _letters = ['T', 'R', 'A', 'V', 'I', 'X', 'O'];
 
@@ -31,36 +32,45 @@ class _SplashScreenState extends State<SplashScreen>
     super.initState();
     _ctrl = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 2400),
+      duration: const Duration(milliseconds: 1850),
     );
 
-    // 1) تجميع أجزاء الشعار الأربعة نحو المركز
+    // 1) تجميع فوري وسريع لأجزاء الشعار الأربعة نحو المركز
     _assemble = CurvedAnimation(
       parent: _ctrl,
-      curve: const Interval(0.0, 0.52, curve: Curves.easeOutBack),
+      curve: const Interval(0.0, 0.48, curve: Curves.easeOutBack),
     );
 
     // 2) رسم الحلقة المضيئة حول الشعار لحظة الالتحام
     _ringSweep = CurvedAnimation(
       parent: _ctrl,
-      curve: const Interval(0.38, 0.72, curve: Curves.easeInOutCubic),
+      curve: const Interval(0.32, 0.68, curve: Curves.easeInOutCubic),
     );
 
-    // 3) بريق ضوئي يمر فوق الشعار بعد التجميع
+    // 3) بريق ضوئي يمر فوق الشعار
     _shimmer = CurvedAnimation(
       parent: _ctrl,
-      curve: const Interval(0.52, 0.80, curve: Curves.easeInOut),
+      curve: const Interval(0.46, 0.78, curve: Curves.easeInOut),
     );
 
     // 4) ظهور الشعار اللفظي
     _tagline = CurvedAnimation(
       parent: _ctrl,
-      curve: const Interval(0.74, 0.96, curve: Curves.easeOut),
+      curve: const Interval(0.60, 0.88, curve: Curves.easeOut),
     );
 
     _ctrl.forward();
 
-    Future.delayed(const Duration(milliseconds: 3000), _navigateToNextScreen);
+    Future.delayed(const Duration(milliseconds: 2350), _navigateToNextScreen);
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_precached) {
+      _precached = true;
+      precacheImage(const AssetImage('logo.png.jpg'), context);
+    }
   }
 
   void _navigateToNextScreen() {
@@ -75,7 +85,7 @@ class _SplashScreenState extends State<SplashScreen>
     Navigator.of(context).pushReplacement(
       PageRouteBuilder(
         pageBuilder: (_, __, ___) => nextPage,
-        transitionDuration: const Duration(milliseconds: 550),
+        transitionDuration: const Duration(milliseconds: 450),
         transitionsBuilder: (_, animation, __, child) {
           return FadeTransition(opacity: animation, child: child);
         },
@@ -84,40 +94,43 @@ class _SplashScreenState extends State<SplashScreen>
   }
 
   Widget _logoImage(double size) {
-    return Image.asset(
-      'logo.png.jpg',
-      width: size,
-      height: size,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => Container(
+    return ClipOval(
+      child: Container(
         width: size,
         height: size,
         color: Colors.white,
-        child: const Center(
-          child: Icon(Icons.travel_explore, size: 96, color: TIColors.orange),
+        child: Image.asset(
+          'logo.png.jpg',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          gaplessPlayback: true,
+          errorBuilder: (_, __, ___) => const Center(
+            child: Icon(Icons.travel_explore, size: 96, color: TIColors.orange),
+          ),
         ),
       ),
     );
   }
 
-  /// بناء ربع واحد من الشعار مع حركته من زاويته إلى المركز
+  /// ربع دائري مرئي فوراً يتحرك من الخارج نحو المركز دون أن يُقصّ
   Widget _buildQuadrant({
-    required double size,
+    required double logoSize,
+    required double stagePad,
     required Alignment alignment,
     required Offset startOffset,
     required double startAngle,
     required double progress,
   }) {
-    final t = progress.clamp(0.0, 1.0);
-    final inv = 1.0 - progress; // يسمح بـ overshoot لطيف من easeOutBack
+    final inv = 1.0 - progress;
     final dx = startOffset.dx * inv;
     final dy = startOffset.dy * inv;
     final angle = startAngle * inv;
-    final half = size / 2;
+    final half = logoSize / 2;
 
     return Positioned(
-      left: alignment.x < 0 ? 0 : half,
-      top: alignment.y < 0 ? 0 : half,
+      left: stagePad + (alignment.x < 0 ? 0 : half),
+      top: stagePad + (alignment.y < 0 ? 0 : half),
       width: half,
       height: half,
       child: Transform.translate(
@@ -125,15 +138,15 @@ class _SplashScreenState extends State<SplashScreen>
         child: Transform.rotate(
           angle: angle,
           child: Opacity(
-            opacity: (t * 1.4).clamp(0.0, 1.0),
+            opacity: (0.35 + progress * 0.65).clamp(0.0, 1.0),
             child: ClipRect(
               child: OverflowBox(
                 alignment: alignment,
-                minWidth: size,
-                maxWidth: size,
-                minHeight: size,
-                maxHeight: size,
-                child: _logoImage(size),
+                minWidth: logoSize,
+                maxWidth: logoSize,
+                minHeight: logoSize,
+                maxHeight: logoSize,
+                child: _logoImage(logoSize),
               ),
             ),
           ),
@@ -144,7 +157,9 @@ class _SplashScreenState extends State<SplashScreen>
 
   @override
   Widget build(BuildContext context) {
-    const double logoSize = 196;
+    const double logoSize = 188;
+    const double stagePad = 56;
+    const double stageSize = logoSize + stagePad * 2;
 
     return Scaffold(
       body: Container(
@@ -172,14 +187,15 @@ class _SplashScreenState extends State<SplashScreen>
               children: [
                 const Spacer(flex: 2),
 
-                // الشعار المتجمّع + الحلقة المضيئة + البريق
+                // مسرح التجميع بدون قص خارجي حتى تُرى الأجزاء الأربع فوراً
                 SizedBox(
-                  width: logoSize + 36,
-                  height: logoSize + 36,
+                  width: stageSize,
+                  height: stageSize,
                   child: Stack(
+                    clipBehavior: Clip.none,
                     alignment: Alignment.center,
                     children: [
-                      // توهج خلفي ناعم عند اكتمال التجميع
+                      // توهج خلفي ناعم
                       Container(
                         width: logoSize + 18,
                         height: logoSize + 18,
@@ -188,8 +204,8 @@ class _SplashScreenState extends State<SplashScreen>
                           boxShadow: [
                             BoxShadow(
                               color: TIColors.orange
-                                  .withOpacity(0.38 * _ringSweep.value),
-                              blurRadius: 42,
+                                  .withOpacity(0.36 * _ringSweep.value),
+                              blurRadius: 40,
                               spreadRadius: 6,
                             ),
                           ],
@@ -198,7 +214,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                       // حلقة مضيئة تُرسَم حول الشعار
                       CustomPaint(
-                        size: const Size(logoSize + 24, logoSize + 24),
+                        size: const Size(logoSize + 22, logoSize + 22),
                         painter: _RingArcPainter(
                           progress: _ringSweep.value,
                           color: TIColors.orange,
@@ -206,99 +222,95 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                       ),
 
-                      // حاوية الشعار الدائرية
-                      Container(
-                        width: logoSize,
-                        height: logoSize,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white.withOpacity(
-                            (p.clamp(0.0, 1.0) * 0.95).clamp(0.0, 1.0),
-                          ),
-                        ),
-                        child: ClipOval(
-                          child: Stack(
-                            children: [
-                              if (merged)
-                                _logoImage(logoSize)
-                              else ...[
-                                _buildQuadrant(
-                                  size: logoSize,
-                                  alignment: Alignment.topLeft,
-                                  startOffset: const Offset(-72, -72),
-                                  startAngle: -0.32,
-                                  progress: p,
-                                ),
-                                _buildQuadrant(
-                                  size: logoSize,
-                                  alignment: Alignment.topRight,
-                                  startOffset: const Offset(72, -72),
-                                  startAngle: 0.32,
-                                  progress: p,
-                                ),
-                                _buildQuadrant(
-                                  size: logoSize,
-                                  alignment: Alignment.bottomLeft,
-                                  startOffset: const Offset(-72, 72),
-                                  startAngle: 0.28,
-                                  progress: p,
-                                ),
-                                _buildQuadrant(
-                                  size: logoSize,
-                                  alignment: Alignment.bottomRight,
-                                  startOffset: const Offset(72, 72),
-                                  startAngle: -0.28,
-                                  progress: p,
-                                ),
-                              ],
-
-                              // وميض ضوئي مائل يمر فوق الشعار عند الالتحام
-                              if (_shimmer.value > 0 && _shimmer.value < 1)
-                                Transform.translate(
-                                  offset: Offset(
-                                    (_shimmer.value * 2 - 1) * logoSize * 1.4,
-                                    0,
-                                  ),
-                                  child: Transform.rotate(
-                                    angle: 0.45,
-                                    child: Container(
-                                      width: 48,
-                                      height: logoSize * 1.5,
-                                      decoration: BoxDecoration(
-                                        gradient: LinearGradient(
-                                          colors: [
-                                            Colors.white.withOpacity(0.0),
-                                            Colors.white.withOpacity(0.55),
-                                            Colors.white.withOpacity(0.0),
-                                          ],
+                      // الأجزاء الأربع المتجمعة أو الشعار الكامل مع البريق
+                      if (merged)
+                        SizedBox(
+                          width: logoSize,
+                          height: logoSize,
+                          child: ClipOval(
+                            child: Stack(
+                              children: [
+                                _logoImage(logoSize),
+                                if (_shimmer.value > 0 && _shimmer.value < 1)
+                                  Transform.translate(
+                                    offset: Offset(
+                                      (_shimmer.value * 2 - 1) * logoSize * 1.4,
+                                      0,
+                                    ),
+                                    child: Transform.rotate(
+                                      angle: 0.45,
+                                      child: Container(
+                                        width: 48,
+                                        height: logoSize * 1.5,
+                                        decoration: BoxDecoration(
+                                          gradient: LinearGradient(
+                                            colors: [
+                                              Colors.white.withOpacity(0.0),
+                                              Colors.white.withOpacity(0.55),
+                                              Colors.white.withOpacity(0.0),
+                                            ],
+                                          ),
                                         ),
                                       ),
                                     ),
                                   ),
-                                ),
-                            ],
+                              ],
+                            ),
                           ),
+                        )
+                      else ...[
+                        _buildQuadrant(
+                          logoSize: logoSize,
+                          stagePad: stagePad,
+                          alignment: Alignment.topLeft,
+                          startOffset: const Offset(-52, -52),
+                          startAngle: -0.26,
+                          progress: p,
                         ),
-                      ),
+                        _buildQuadrant(
+                          logoSize: logoSize,
+                          stagePad: stagePad,
+                          alignment: Alignment.topRight,
+                          startOffset: const Offset(52, -52),
+                          startAngle: 0.26,
+                          progress: p,
+                        ),
+                        _buildQuadrant(
+                          logoSize: logoSize,
+                          stagePad: stagePad,
+                          alignment: Alignment.bottomLeft,
+                          startOffset: const Offset(-52, 52),
+                          startAngle: 0.22,
+                          progress: p,
+                        ),
+                        _buildQuadrant(
+                          logoSize: logoSize,
+                          stagePad: stagePad,
+                          alignment: Alignment.bottomRight,
+                          startOffset: const Offset(52, 52),
+                          startAngle: -0.22,
+                          progress: p,
+                        ),
+                      ],
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 30),
+                const SizedBox(height: 10),
 
-                // تجميع حروف TRAVIXO حرفاً بحرف من الأطراف
+                // تجميع حروف TRAVIXO حرفاً بحرف بسرعة وسلاسة
                 Directionality(
                   textDirection: TextDirection.ltr,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: List.generate(_letters.length, (i) {
-                      final start = 0.48 + (i * 0.045);
+                      final start = 0.28 + (i * 0.045);
                       final end = (start + 0.22).clamp(0.0, 1.0);
                       final t = Curves.easeOutCubic.transform(
                         ((_ctrl.value - start) / (end - start)).clamp(0.0, 1.0),
                       );
-                      final fromX = (i - 3) * 18.0 * (1.0 - t);
-                      final fromY = (i.isEven ? -14.0 : 14.0) * (1.0 - t);
+                      final fromX = (i - 3) * 16.0 * (1.0 - t);
+                      final fromY = (i.isEven ? -12.0 : 12.0) * (1.0 - t);
 
                       return Transform.translate(
                         offset: Offset(fromX, fromY),
@@ -326,7 +338,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                 // الشعار اللفظي
                 Transform.translate(
-                  offset: Offset(0, 14 * (1.0 - _tagline.value)),
+                  offset: Offset(0, 12 * (1.0 - _tagline.value)),
                   child: Opacity(
                     opacity: _tagline.value,
                     child: Text(
@@ -344,7 +356,7 @@ class _SplashScreenState extends State<SplashScreen>
 
                 // شريط تقدم سفلي ناعم
                 Padding(
-                  padding: const EdgeInsets.only(bottom: 42),
+                  padding: const EdgeInsets.only(bottom: 40),
                   child: SizedBox(
                     width: 110,
                     child: ClipRRect(
