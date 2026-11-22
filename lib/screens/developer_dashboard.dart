@@ -577,6 +577,285 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     }
   }
 
+  Future<void> _openAddDeveloperDialog(bool ar) async {
+    final firstCtrl = TextEditingController();
+    final secondCtrl = TextEditingController();
+    final emailCtrl = TextEditingController();
+    final passCtrl = TextEditingController();
+    final phoneCtrl = TextEditingController();
+
+    try {
+      await showModalBottomSheet(
+        context: context,
+        isScrollControlled: true,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        builder: (ctx) => Padding(
+          padding: EdgeInsets.fromLTRB(
+            20,
+            20,
+            20,
+            MediaQuery.of(ctx).viewInsets.bottom + 24,
+          ),
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  ar ? 'إضافة مطور / مشرف جديد' : 'Add New Developer / Admin',
+                  style: const TextStyle(
+                      fontSize: 18, fontWeight: FontWeight.w900),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  ar
+                      ? 'يدخل المطور مباشرة بالبريد الإلكتروني وكلمة المرور بدون الحاجة لرمز تحقق OTP.'
+                      : 'Developer signs in directly with Email & Password (no OTP required).',
+                  style: TextStyle(
+                      fontSize: 12.5, color: Theme.of(ctx).hintColor),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: firstCtrl,
+                        decoration: InputDecoration(
+                          labelText: ar ? 'الاسم الأول *' : 'First Name *',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: secondCtrl,
+                        decoration: InputDecoration(
+                          labelText: ar ? 'الاسم الثاني' : 'Last Name',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: emailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: ar ? 'البريد الإلكتروني *' : 'Email Address *',
+                    hintText: 'dev@example.com',
+                    prefixIcon: const Icon(Icons.mail_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: passCtrl,
+                  obscureText: true,
+                  decoration: InputDecoration(
+                    labelText: ar
+                        ? 'كلمة مرور المطور (6 أحرف فأكثر) *'
+                        : 'Developer Password (6+ chars) *',
+                    prefixIcon: const Icon(Icons.lock_outline),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: phoneCtrl,
+                  keyboardType: TextInputType.phone,
+                  decoration: InputDecoration(
+                    labelText: ar ? 'رقم الهاتف (اختياري)' : 'Phone (Optional)',
+                    prefixIcon: const Icon(Icons.phone_outlined),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton.icon(
+                    onPressed: () async {
+                      final fn = firstCtrl.text.trim();
+                      final sn = secondCtrl.text.trim();
+                      final em = emailCtrl.text.trim().toLowerCase();
+                      final pw = passCtrl.text.trim();
+                      final ph = phoneCtrl.text.trim();
+                      if (fn.isEmpty || !em.contains('@') || pw.length < 6) {
+                        ScaffoldMessenger.of(ctx).showSnackBar(
+                          SnackBar(
+                            content: Text(ar
+                                ? 'أدخل الاسم، وبريداً صحيحاً، وكلمة مرور من 6 أحرف فأكثر'
+                                : 'Enter name, valid email, and 6+ char password'),
+                          ),
+                        );
+                        return;
+                      }
+                      try {
+                        final existing = await supabase
+                            .from('users')
+                            .select()
+                            .eq('email', em)
+                            .maybeSingle();
+                        if (existing != null) {
+                          await supabase.from('users').update({
+                            'first_name': fn,
+                            if (sn.isNotEmpty) 'second_name': sn,
+                            if (ph.isNotEmpty) 'phone': ph,
+                            'password_code': pw,
+                            'role': 'developer',
+                          }).eq('user_id', existing['user_id']);
+                        } else {
+                          await supabase.from('users').insert({
+                            'first_name': fn,
+                            'second_name': sn,
+                            'email': em,
+                            if (ph.isNotEmpty) 'phone': ph,
+                            'password_code': pw,
+                            'age': 25,
+                            'role': 'developer',
+                          });
+                        }
+                        await logAdminAction(
+                          'Add developer',
+                          newVal: '$fn ($em)',
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        await _loadStats();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(ar
+                                  ? 'تمت إضافة المطور بنجاح ✅ يمكنه الدخول بالبريد وكلمة المرور مباشرة'
+                                  : 'Developer added! Ready to sign in with Email & Password.'),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (ctx.mounted) {
+                          ScaffoldMessenger.of(ctx).showSnackBar(
+                            SnackBar(content: Text('Error: $e')),
+                          );
+                        }
+                      }
+                    },
+                    icon: const Icon(Icons.person_add_alt_1_rounded, size: 18),
+                    label: Text(ar ? 'حفظ وإضافة المطور' : 'Save Developer'),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    } finally {
+      firstCtrl.dispose();
+      secondCtrl.dispose();
+      emailCtrl.dispose();
+      passCtrl.dispose();
+      phoneCtrl.dispose();
+    }
+  }
+
+  Future<void> _openChangeDevPasswordDialog(
+      Map<String, dynamic> u, bool ar) async {
+    final uid = u['user_id'];
+    if (uid == null) return;
+    final passCtrl = TextEditingController();
+    try {
+      await showDialog(
+        context: context,
+        builder: (d) => AlertDialog(
+          title: Text(ar ? 'تغيير كلمة مرور المطور' : 'Change Developer Password'),
+          content: TextField(
+            controller: passCtrl,
+            obscureText: true,
+            decoration: InputDecoration(
+              labelText: ar ? 'كلمة المرور الجديدة (6+ أحرف)' : 'New Password (6+ chars)',
+              prefixIcon: const Icon(Icons.lock_reset_rounded),
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(d),
+              child: Text(ar ? 'إلغاء' : 'Cancel'),
+            ),
+            FilledButton(
+              onPressed: () async {
+                final pw = passCtrl.text.trim();
+                if (pw.length < 6) return;
+                try {
+                  await supabase
+                      .from('users')
+                      .update({'password_code': pw})
+                      .eq('user_id', uid);
+                  await logAdminAction(
+                    'Change developer password #$uid',
+                    newVal: 'Updated',
+                  );
+                  if (d.mounted) Navigator.pop(d);
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(ar
+                            ? 'تم تغيير كلمة مرور المطور بنجاح ✅'
+                            : 'Developer password updated'),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (d.mounted) {
+                    ScaffoldMessenger.of(d)
+                        .showSnackBar(SnackBar(content: Text('Error: $e')));
+                  }
+                }
+              },
+              child: Text(ar ? 'حفظ' : 'Save'),
+            ),
+          ],
+        ),
+      );
+    } finally {
+      passCtrl.dispose();
+    }
+  }
+
+  Future<void> _toggleUserRole(Map<String, dynamic> u, bool ar) async {
+    final uid = u['user_id'];
+    if (uid == null) return;
+    final currentRole = (u['role'] ?? 'customer').toString();
+    final isDev = currentRole == 'developer';
+    final nextRole = isDev ? 'customer' : 'developer';
+    try {
+      await supabase
+          .from('users')
+          .update({'role': nextRole})
+          .eq('user_id', uid);
+      await logAdminAction(
+        'Change role user #$uid',
+        oldVal: currentRole,
+        newVal: nextRole,
+      );
+      await _loadStats();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            nextRole == 'developer'
+                ? (ar
+                    ? 'تمت ترقية المستخدم إلى مطور ✅'
+                    : 'User promoted to Developer')
+                : (ar
+                    ? 'تم تحويل الحساب إلى عميل'
+                    : 'Account changed to Customer'),
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('Error: $e')));
+      }
+    }
+  }
+
   Future<void> _toggleTicketStatus(Map<String, dynamic> t, bool ar) async {
     final current = (t['status'] ?? 'open').toString();
     final next = current == 'open' ? 'closed' : 'open';
@@ -1830,6 +2109,18 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
     return ListView(
       padding: const EdgeInsets.all(16),
       children: [
+        Row(
+          children: [
+            Expanded(
+              child: FilledButton.icon(
+                onPressed: () => _openAddDeveloperDialog(ar),
+                icon: const Icon(Icons.admin_panel_settings_rounded, size: 18),
+                label: Text(ar ? 'إضافة مطور / مشرف جديد' : 'Add New Developer'),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
         TextField(
           onChanged: (v) => setState(() => _userQuery = v),
           decoration: InputDecoration(
@@ -1968,41 +2259,81 @@ class _DeveloperDashboardState extends State<DeveloperDashboard> {
                         ),
                     ],
                   ),
-                  if (!isDev && uidInt != null) ...[
+                  if (uidInt != null) ...[
                     const SizedBox(height: 10),
-                    Row(
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
-                        Expanded(
-                          child: OutlinedButton.icon(
+                        if (!isDev)
+                          OutlinedButton.icon(
                             onPressed: () => _openAdjustWalletDialog(u, ar),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 36),
+                              minimumSize: const Size(0, 34),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
                             ),
                             icon: const Icon(
                                 Icons.account_balance_wallet_outlined,
-                                size: 16),
+                                size: 15),
                             label: Text(
-                              ar ? 'شحن / تعديل الرصيد' : 'Adjust Wallet',
-                              style: const TextStyle(fontSize: 12),
+                              ar ? 'شحن الرصيد' : 'Wallet',
+                              style: const TextStyle(fontSize: 11.5),
                             ),
                           ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: OutlinedButton.icon(
+                        if (!isDev)
+                          OutlinedButton.icon(
                             onPressed: () => _openSendNotificationDialog(
                               ar,
                               preselectedUserId: uidInt,
                             ),
                             style: OutlinedButton.styleFrom(
-                              minimumSize: const Size(0, 36),
+                              minimumSize: const Size(0, 34),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
                             ),
                             icon: const Icon(Icons.notifications_active_outlined,
-                                size: 16),
+                                size: 15),
                             label: Text(
                               ar ? 'إشعار خاص' : 'Notify',
-                              style: const TextStyle(fontSize: 12),
+                              style: const TextStyle(fontSize: 11.5),
                             ),
+                          ),
+                        if (isDev)
+                          OutlinedButton.icon(
+                            onPressed: () => _openChangeDevPasswordDialog(u, ar),
+                            style: OutlinedButton.styleFrom(
+                              minimumSize: const Size(0, 34),
+                              padding: const EdgeInsets.symmetric(horizontal: 10),
+                              foregroundColor: TIColors.cardRent,
+                              side: const BorderSide(color: TIColors.cardRent),
+                            ),
+                            icon: const Icon(Icons.lock_reset_rounded, size: 15),
+                            label: Text(
+                              ar ? 'تغيير كلمة المرور' : 'Change Password',
+                              style: const TextStyle(fontSize: 11.5),
+                            ),
+                          ),
+                        OutlinedButton.icon(
+                          onPressed: () => _toggleUserRole(u, ar),
+                          style: OutlinedButton.styleFrom(
+                            minimumSize: const Size(0, 34),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            foregroundColor:
+                                isDev ? TIColors.danger : TIColors.gold,
+                            side: BorderSide(
+                              color: isDev ? TIColors.danger : TIColors.gold,
+                            ),
+                          ),
+                          icon: Icon(
+                            isDev
+                                ? Icons.person_remove_outlined
+                                : Icons.admin_panel_settings_outlined,
+                            size: 15,
+                          ),
+                          label: Text(
+                            isDev
+                                ? (ar ? 'إلغاء صلاحية المطور' : 'Remove Admin')
+                                : (ar ? 'ترقية لمطور' : 'Make Developer'),
+                            style: const TextStyle(fontSize: 11.5),
                           ),
                         ),
                       ],
