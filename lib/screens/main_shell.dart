@@ -297,7 +297,65 @@ class _MainShellState extends State<MainShell> {
               ),
             )
           : null,
-      body: IndexedStack(index: _index, children: pages),
+      body: Column(
+        children: [
+          if (state.isOffline || state.pendingSyncBookings.isNotEmpty)
+            Material(
+              color: state.isOffline ? TIColors.navy : TIColors.orangeDark,
+              child: SafeArea(
+                bottom: false,
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+                  child: Row(
+                    children: [
+                      Icon(
+                        state.isOffline
+                            ? Icons.wifi_off_rounded
+                            : Icons.cloud_upload_outlined,
+                        color: Colors.white,
+                        size: 16,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          state.isOffline
+                              ? (l.isArabic
+                                  ? 'وضع بدون إنترنت — يتم عرض البيانات المحفوظة محلياً'
+                                  : 'Offline Mode — Showing locally cached data')
+                              : (l.isArabic
+                                  ? 'يوجد ${state.pendingSyncBookings.length} حجز بانتظار المزامنة السحابية'
+                                  : '${state.pendingSyncBookings.length} booking(s) pending cloud sync'),
+                          style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: () async {
+                          await state.fetchLiveCatalog();
+                          await state.syncFromSupabase();
+                        },
+                        style: TextButton.styleFrom(
+                          foregroundColor: TIColors.gold,
+                          minimumSize: const Size(0, 28),
+                          padding: const EdgeInsets.symmetric(horizontal: 8),
+                        ),
+                        child: Text(
+                          l.isArabic ? 'مزامنة' : 'Sync',
+                          style: const TextStyle(
+                              fontSize: 12, fontWeight: FontWeight.w900),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          Expanded(child: IndexedStack(index: _index, children: pages)),
+        ],
+      ),
       bottomNavigationBar: isWide
           ? null
           : NavigationBar(

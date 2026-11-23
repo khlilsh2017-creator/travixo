@@ -44,6 +44,8 @@ class AppState extends ChangeNotifier {
   List<Hotel> liveHotels = [];
   List<Car> liveCars = [];
   List<Offer> liveOffers = [];
+  bool isOffline = false;
+  List<Booking> pendingSyncBookings = [];
 
   Locale get locale => _locale;
   ThemeMode get themeMode => _themeMode;
@@ -90,6 +92,7 @@ class AppState extends ChangeNotifier {
     favoriteIds = (prefs.getStringList('favorites') ?? []).toSet();
     notifications = prefs.getStringList('notifications') ?? [];
     _readNotifIds = (prefs.getStringList('read_notif_ids') ?? []).toSet();
+    _loadOfflineCaches();
     notifyListeners();
     syncFromSupabase();
     fetchLiveCatalog();
@@ -175,105 +178,196 @@ class AppState extends ChangeNotifier {
   Future<void> fetchLiveCatalog() async {
     try {
       final provRows = await supabase.from('provinces').select();
-      final Map<int, String> provById = {};
-      for (final p in (provRows as List)) {
-        final pid = p['province_id'] as int?;
-        final en = p['name_en']?.toString().toLowerCase() ?? 'sanaa';
-        if (pid != null) provById[pid] = en;
-      }
-
       final hotelRows =
           await supabase.from('hotels').select().order('hotel_id');
       final roomRows =
           await supabase.from('hotel_rooms').select().order('room_id');
       final drvRows = await supabase.from('drivers').select();
-      final Map<int, Map<String, dynamic>> drvById = {};
-      for (final d in (drvRows as List)) {
-        final did = d['driver_id'] as int?;
-        if (did != null) drvById[did] = Map<String, dynamic>.from(d);
-      }
-
-      if ((hotelRows as List).isNotEmpty) {
-        liveHotels = hotelRows.map((h) {
-          final hid = h['hotel_id'] as int;
-          final rooms = (roomRows as List)
-              .where((r) => r['hotel_id'] == hid)
-              .map((r) => HotelRoom(
-                    id: 'r_${r['room_id']}',
-                    name: r['name']?.toString() ?? 'Room',
-                    typeId: 'standard',
-                    bedType: r['bed_type']?.toString() ?? 'King',
-                    pricePerNightYer:
-                        (r['price_night'] as num?)?.toDouble() ?? 30000,
-                    capacity: (r['capacity'] as num?)?.toInt() ?? 2,
-                    amenities: const ['Wi-Fi', 'AC'],
-                    available: r['available'] != false,
-                  ))
-              .toList();
-          final pid = provById[h['province_id']] ?? 'sanaa';
-          return Hotel(
-            id: '$hid',
-            name: h['name_ar']?.toString() ?? '',
-            provinceId: pid,
-            cityId: pid,
-            rating: (h['rating'] as num?)?.toDouble() ?? 4.5,
-            reviewsCount: 25,
-            description: h['name_ar']?.toString() ?? '',
-            amenities: const ['Wi-Fi', 'Parking'],
-            rooms: rooms,
-            verified: h['verified'] == true,
-            lat: (h['lat'] as num?)?.toDouble() ?? 15.36,
-            lng: (h['lng'] as num?)?.toDouble() ?? 44.19,
-            imageUrl: h['image_url']?.toString(),
-          );
-        }).toList();
-      }
-
       final carRows =
           await supabase.from('vehicles').select().order('vehicle_id');
-      if ((carRows as List).isNotEmpty) {
-        liveCars = carRows.map((v) {
-          final st = v['status']?.toString() ?? 'available';
-          final drv = drvById[v['driver_id']];
-          return Car(
-            id: '${v['vehicle_id']}',
-            name: v['name']?.toString() ?? '',
-            categoryId: 'sedan',
-            year: (v['year'] as num?)?.toInt() ?? 2024,
-            seats: (v['seats'] as num?)?.toInt() ?? 4,
-            pricePerDayYer: (v['full_price'] as num?)?.toDouble() ?? 25000,
-            withDriver: v['with_driver'] != false,
-            status: Availability.values.firstWhere(
-              (a) => a.name == st,
-              orElse: () => Availability.available,
-            ),
-            driverName: drv?['full_name']?.toString(),
-            driverRating: (drv?['rating'] as num?)?.toDouble() ?? 4.8,
-            imageUrl: v['image_url']?.toString(),
-          );
-        }).toList();
-      }
-
       final offerRows = await supabase
           .from('offers')
           .select()
           .eq('active', true)
           .order('offer_id');
-      if ((offerRows as List).isNotEmpty) {
-        liveOffers = offerRows
-            .map((o) => Offer(
-                  id: '${o['offer_id']}',
-                  title: o['title']?.toString() ?? '',
-                  subtitle: o['subtitle']?.toString() ?? '',
-                  service: ServiceType.hotel,
-                  targetId: liveHotels.isNotEmpty ? liveHotels.first.id : 'h1',
-                  discountPercent: (o['discount'] as num?)?.toInt() ?? 10,
-                  imageUrl: o['image_url']?.toString(),
+
+      final rawPayload = {
+        'provinces': List<Map<String, dynamic>>.from(provRows as List),
+        'hotels': List<Map<String, dynamic>>.from(hotelRows as List),
+        'rooms': List<Map<String, dynamic>>.from(roomRows as List),
+        'drivers': List<Map<String, dynamic>>.from(drvRows as List),
+        'vehicles': List<Map<String, dynamic>>.from(carRows as List),
+        'offers': List<Map<String, dynamic>>.from(offerRows as List),
+      };
+      _applyRawCatalog(rawPayload);
+      await prefs.setString('cached_catalog_v1', jsonEncode(rawPayload));
+      if (isOffline) isOffline = false;
+      notifyListeners();
+      await syncPendingOfflineActions();
+    } catch (_) {
+      isOffline = true;
+      notifyListeners();
+    }
+  }
+
+  void _applyRawCatalog(Map<String, dynamic> raw) {
+    final provRows = (raw['provinces'] as List?) ?? const [];
+    final hotelRows = (raw['hotels'] as List?) ?? const [];
+    final roomRows = (raw['rooms'] as List?) ?? const [];
+    final drvRows = (raw['drivers'] as List?) ?? const [];
+    final carRows = (raw['vehicles'] as List?) ?? const [];
+    final offerRows = (raw['offers'] as List?) ?? const [];
+
+    final Map<int, String> provById = {};
+    for (final p in provRows) {
+      final pid = (p['province_id'] as num?)?.toInt();
+      final en = p['name_en']?.toString().toLowerCase() ?? 'sanaa';
+      if (pid != null) provById[pid] = en;
+    }
+
+    final Map<int, Map<String, dynamic>> drvById = {};
+    for (final d in drvRows) {
+      final did = (d['driver_id'] as num?)?.toInt();
+      if (did != null) drvById[did] = Map<String, dynamic>.from(d as Map);
+    }
+
+    if (hotelRows.isNotEmpty) {
+      liveHotels = hotelRows.map((h) {
+        final hid = (h['hotel_id'] as num).toInt();
+        final rooms = roomRows
+            .where((r) => (r['hotel_id'] as num?)?.toInt() == hid)
+            .map((r) => HotelRoom(
+                  id: 'r_${r['room_id']}',
+                  name: r['name']?.toString() ?? 'Room',
+                  typeId: 'standard',
+                  bedType: r['bed_type']?.toString() ?? 'King',
+                  pricePerNightYer:
+                      (r['price_night'] as num?)?.toDouble() ?? 30000,
+                  capacity: (r['capacity'] as num?)?.toInt() ?? 2,
+                  amenities: const ['Wi-Fi', 'AC'],
+                  available: r['available'] != false,
                 ))
             .toList();
+        final pid = provById[(h['province_id'] as num?)?.toInt()] ?? 'sanaa';
+        return Hotel(
+          id: '$hid',
+          name: h['name_ar']?.toString() ?? '',
+          provinceId: pid,
+          cityId: pid,
+          rating: (h['rating'] as num?)?.toDouble() ?? 4.5,
+          reviewsCount: 25,
+          description: h['name_ar']?.toString() ?? '',
+          amenities: const ['Wi-Fi', 'Parking'],
+          rooms: rooms,
+          verified: h['verified'] == true,
+          lat: (h['lat'] as num?)?.toDouble() ?? 15.36,
+          lng: (h['lng'] as num?)?.toDouble() ?? 44.19,
+          imageUrl: h['image_url']?.toString(),
+        );
+      }).toList();
+    }
+
+    if (carRows.isNotEmpty) {
+      liveCars = carRows.map((v) {
+        final st = v['status']?.toString() ?? 'available';
+        final drv = drvById[(v['driver_id'] as num?)?.toInt()];
+        return Car(
+          id: '${v['vehicle_id']}',
+          name: v['name']?.toString() ?? '',
+          categoryId: 'sedan',
+          year: (v['year'] as num?)?.toInt() ?? 2024,
+          seats: (v['seats'] as num?)?.toInt() ?? 4,
+          pricePerDayYer: (v['full_price'] as num?)?.toDouble() ?? 25000,
+          withDriver: v['with_driver'] != false,
+          status: Availability.values.firstWhere(
+            (a) => a.name == st,
+            orElse: () => Availability.available,
+          ),
+          driverName: drv?['full_name']?.toString(),
+          driverRating: (drv?['rating'] as num?)?.toDouble() ?? 4.8,
+          imageUrl: v['image_url']?.toString(),
+        );
+      }).toList();
+    }
+
+    if (offerRows.isNotEmpty) {
+      liveOffers = offerRows
+          .map((o) => Offer(
+                id: '${o['offer_id']}',
+                title: o['title']?.toString() ?? '',
+                subtitle: o['subtitle']?.toString() ?? '',
+                service: ServiceType.hotel,
+                targetId: liveHotels.isNotEmpty ? liveHotels.first.id : 'h1',
+                discountPercent: (o['discount'] as num?)?.toInt() ?? 15,
+                imageUrl: o['image_url']?.toString(),
+              ))
+          .toList();
+    }
+  }
+
+  void _loadOfflineCaches() {
+    final catRaw = prefs.getString('cached_catalog_v1');
+    if (catRaw != null && catRaw.isNotEmpty) {
+      try {
+        _applyRawCatalog(Map<String, dynamic>.from(jsonDecode(catRaw)));
+      } catch (_) {}
+    }
+    final notifsRaw = prefs.getString('cached_live_notifs_v1');
+    if (notifsRaw != null && notifsRaw.isNotEmpty) {
+      try {
+        liveNotifications = (jsonDecode(notifsRaw) as List)
+            .map((e) => Map<String, dynamic>.from(e as Map))
+            .toList();
+      } catch (_) {}
+    }
+    final pendRaw = prefs.getString('pending_bookings_v1');
+    if (pendRaw != null && pendRaw.isNotEmpty) {
+      try {
+        pendingSyncBookings = (jsonDecode(pendRaw) as List)
+            .map((e) => Booking.fromJson(Map<String, dynamic>.from(e as Map)))
+            .toList();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _savePendingBookings() async {
+    await prefs.setString(
+      'pending_bookings_v1',
+      jsonEncode(pendingSyncBookings.map((e) => e.toJson()).toList()),
+    );
+  }
+
+  /// يرفع أي حجوزات أُنشئت أثناء انقطاع الإنترنت بمجرد عودة الاتصال
+  Future<int> syncPendingOfflineActions() async {
+    if (pendingSyncBookings.isEmpty) return 0;
+    final uid = _dbUserId;
+    if (uid == null) return 0;
+    int synced = 0;
+    final remaining = <Booking>[];
+    for (final b in List<Booking>.from(pendingSyncBookings)) {
+      try {
+        await supabase.from('bookings').upsert({
+          'booking_id': b.id,
+          'user_id': uid,
+          'service': b.service.name,
+          'title': b.title,
+          'date_text': b.dateText,
+          'total_yer': b.totalYer,
+          'payment': b.payment.name,
+          'status': b.status.name,
+        }, onConflict: 'booking_id');
+        synced++;
+      } catch (_) {
+        remaining.add(b);
       }
+    }
+    pendingSyncBookings = remaining;
+    await _savePendingBookings();
+    if (synced > 0) {
+      isOffline = false;
       notifyListeners();
-    } catch (_) {}
+    }
+    return synced;
   }
 
   Future<String> seedLocalCatalogToSupabase() async {
@@ -584,7 +678,18 @@ class AppState extends ChangeNotifier {
         'status': b.payment == PaymentMethod.wallet ? 'completed' : 'pending',
         if (b.details['ref'] != null) 'ref_number': b.details['ref'].toString(),
       });
-    } catch (_) {}
+      if (isOffline) {
+        isOffline = false;
+        notifyListeners();
+      }
+    } catch (_) {
+      isOffline = true;
+      if (!pendingSyncBookings.any((x) => x.id == b.id)) {
+        pendingSyncBookings.add(b);
+        await _savePendingBookings();
+      }
+      notifyListeners();
+    }
   }
 
   void cancelBooking(String id) {
@@ -656,6 +761,7 @@ class AppState extends ChangeNotifier {
                 return false;
               }).map((e) => Map<String, dynamic>.from(e)).toList();
               liveNotifications = filtered;
+              prefs.setString('cached_live_notifs_v1', jsonEncode(filtered));
               notifyListeners();
             },
             onError: (_) {},
